@@ -1,0 +1,199 @@
+from __future__ import annotations
+
+import datetime as dt
+
+from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class ContractType(Base):
+    __tablename__ = "contract_types"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(unique=True)
+    description: Mapped[str] = mapped_column(default="")
+    active: Mapped[bool] = mapped_column(default=True)
+
+    patterns: Mapped[list["PricingPattern"]] = relationship(
+        secondary="contract_type_patterns", back_populates="contract_types"
+    )
+
+
+class PricingPattern(Base):
+    __tablename__ = "pricing_patterns"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(unique=True)
+    qty1_label: Mapped[str | None] = mapped_column(default=None)
+    qty2_label: Mapped[str | None] = mapped_column(default=None)
+    qty3_label: Mapped[str | None] = mapped_column(default=None)
+
+    contract_types: Mapped[list["ContractType"]] = relationship(
+        secondary="contract_type_patterns", back_populates="patterns"
+    )
+
+    @property
+    def qty_labels(self) -> list[str]:
+        return [lbl for lbl in (self.qty1_label, self.qty2_label, self.qty3_label) if lbl]
+
+
+class ContractTypePattern(Base):
+    __tablename__ = "contract_type_patterns"
+    __table_args__ = (UniqueConstraint("contract_type_id", "pricing_pattern_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    contract_type_id: Mapped[int] = mapped_column(ForeignKey("contract_types.id"))
+    pricing_pattern_id: Mapped[int] = mapped_column(ForeignKey("pricing_patterns.id"))
+
+
+class InsuranceRateMaster(Base):
+    __tablename__ = "insurance_rate_masters"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fiscal_year: Mapped[int] = mapped_column(unique=True)  # 西暦(例: 令和7年度 -> 2025)
+    health_insurance_rate: Mapped[float] = mapped_column(default=0.0)
+    nursing_care_rate: Mapped[float] = mapped_column(default=0.0)
+    pension_rate: Mapped[float] = mapped_column(default=0.0)
+    child_allowance_rate: Mapped[float] = mapped_column(default=0.0)
+    employment_insurance_rate: Mapped[float] = mapped_column(default=0.0)
+    workers_comp_rate: Mapped[float] = mapped_column(default=0.0)
+    general_contribution_rate: Mapped[float] = mapped_column(default=0.0)
+
+    @property
+    def total_rate(self) -> float:
+        return (
+            self.health_insurance_rate
+            + self.nursing_care_rate
+            + self.pension_rate
+            + self.child_allowance_rate
+            + self.employment_insurance_rate
+            + self.workers_comp_rate
+            + self.general_contribution_rate
+        )
+
+
+class BillingItemMaster(Base):
+    __tablename__ = "billing_item_masters"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_name: Mapped[str] = mapped_column(unique=True)
+    item_detail: Mapped[str] = mapped_column(default="")
+    category: Mapped[str] = mapped_column(default="")  # 職種 or 経費
+
+
+class CancellationPolicyMaster(Base):
+    __tablename__ = "cancellation_policy_masters"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    policy_name: Mapped[str] = mapped_column(unique=True)
+    policy_text_client: Mapped[str] = mapped_column(default="")
+    policy_text_internal: Mapped[str] = mapped_column(default="")
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    dept: Mapped[str] = mapped_column(default="")
+    client_name: Mapped[str] = mapped_column(default="")
+    project_no: Mapped[str] = mapped_column(default="")
+    project_name: Mapped[str] = mapped_column(default="")
+    contract_start: Mapped[dt.date | None] = mapped_column(default=None)
+    contract_end: Mapped[dt.date | None] = mapped_column(default=None)
+    copied_from_project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), default=None)
+
+    financial_records: Mapped[list["FinancialRecord"]] = relationship(back_populates="project")
+
+
+class FinancialRecord(Base):
+    __tablename__ = "financial_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
+    record_type: Mapped[str]  # "概算見積" / "確定見積" / "実績"
+    contract_type_id: Mapped[int | None] = mapped_column(ForeignKey("contract_types.id"), default=None)
+    copied_from_id: Mapped[int | None] = mapped_column(ForeignKey("financial_records.id"), default=None)
+    period_start: Mapped[dt.date | None] = mapped_column(default=None)
+    period_end: Mapped[dt.date | None] = mapped_column(default=None)
+    cancellation_policy_id: Mapped[int | None] = mapped_column(ForeignKey("cancellation_policy_masters.id"), default=None)
+    sga_cost: Mapped[float] = mapped_column(default=0.0)
+    segment: Mapped[str] = mapped_column(default="")
+    product: Mapped[str] = mapped_column(default="")
+    region: Mapped[str] = mapped_column(default="")
+    order_status: Mapped[str] = mapped_column(default="")
+    unit_name: Mapped[str] = mapped_column(default="")
+    headquarters_name: Mapped[str] = mapped_column(default="")
+    created_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)
+    updated_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow)
+
+    project: Mapped["Project"] = relationship(back_populates="financial_records")
+    contract_type: Mapped["ContractType | None"] = relationship()
+    line_items: Mapped[list["LineItem"]] = relationship(back_populates="financial_record", cascade="all, delete-orphan")
+    cost_lines: Mapped[list["CostLine"]] = relationship(back_populates="financial_record", cascade="all, delete-orphan")
+
+
+class LineItem(Base):
+    """明細行(人件費)。個人名は持たず、請求科目(billing_item)を単位とする。"""
+
+    __tablename__ = "line_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    financial_record_id: Mapped[int] = mapped_column(ForeignKey("financial_records.id"))
+    billing_item_id: Mapped[int | None] = mapped_column(ForeignKey("billing_item_masters.id"), default=None)
+    billing_item_name_free: Mapped[str | None] = mapped_column(default=None)  # マスタ未登録の自由入力用
+    insurance_status: Mapped[str] = mapped_column(default="済")  # 済/未/外注(社内用、顧客提出物には出さない)
+    headcount: Mapped[int] = mapped_column(default=1)
+    employment_type: Mapped[str] = mapped_column(default="")  # 常勤・CA区分(経営ボード明細用、社内用)
+    remarks: Mapped[str] = mapped_column(default="")
+
+    billing_daily_rate: Mapped[float] = mapped_column(default=0.0)
+    billing_hourly_rate: Mapped[float] = mapped_column(default=0.0)
+    billing_days: Mapped[float] = mapped_column(default=0.0)
+    billing_commute_monthly: Mapped[float] = mapped_column(default=0.0)
+    billing_admin_fee_monthly: Mapped[float] = mapped_column(default=0.0)
+    billing_allowance_monthly: Mapped[float] = mapped_column(default=0.0)
+
+    payment_pricing_pattern_id: Mapped[int | None] = mapped_column(ForeignKey("pricing_patterns.id"), default=None)
+    payment_rate: Mapped[float] = mapped_column(default=0.0)
+    payment_qty1: Mapped[float] = mapped_column(default=1.0)
+    payment_qty2: Mapped[float] = mapped_column(default=1.0)
+    payment_qty3: Mapped[float] = mapped_column(default=1.0)
+    payment_commute_monthly: Mapped[float] = mapped_column(default=0.0)
+    payment_allowance_monthly: Mapped[float] = mapped_column(default=0.0)
+
+    standard_hours_daily: Mapped[float] = mapped_column(default=8.0)
+    standard_hours_monthly: Mapped[float] = mapped_column(default=0.0)
+    overtime_hours_monthly: Mapped[float] = mapped_column(default=0.0)
+    night_overtime_hours_monthly: Mapped[float] = mapped_column(default=0.0)
+    unbilled_leave_hours_monthly: Mapped[float] = mapped_column(default=0.0)
+
+    financial_record: Mapped["FinancialRecord"] = relationship(back_populates="line_items")
+    billing_item: Mapped["BillingItemMaster | None"] = relationship()
+    payment_pricing_pattern: Mapped["PricingPattern | None"] = relationship()
+
+    @property
+    def billing_item_display(self) -> str:
+        if self.billing_item is not None:
+            return self.billing_item.item_name
+        return self.billing_item_name_free or "(未設定)"
+
+
+class CostLine(Base):
+    __tablename__ = "cost_lines"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    financial_record_id: Mapped[int] = mapped_column(ForeignKey("financial_records.id"))
+    category: Mapped[str] = mapped_column(default="")
+    pricing_pattern_id: Mapped[int | None] = mapped_column(ForeignKey("pricing_patterns.id"), default=None)
+    rate: Mapped[float] = mapped_column(default=0.0)
+    qty1: Mapped[float] = mapped_column(default=1.0)
+    qty2: Mapped[float] = mapped_column(default=1.0)
+    qty3: Mapped[float] = mapped_column(default=1.0)
+    timing: Mapped[str] = mapped_column(default="ランニング")  # イニシャル/ランニング
+
+    financial_record: Mapped["FinancialRecord"] = relationship(back_populates="cost_lines")
+    pricing_pattern: Mapped["PricingPattern | None"] = relationship()

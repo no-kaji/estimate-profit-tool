@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import os
+import tempfile
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import Base
 
-# Streamlit Community Cloud のファイルシステムは再デプロイ・再起動で消える(永続化されない)。
-# 初期リリースではローカル/社内共有ドライブ上のSQLiteファイルを想定し、
-# クラウド上での長期運用には外部DB(例: Postgres)への切り替えが必要になる(既知の制約)。
-DB_PATH = os.environ.get("ESTIMATE_TOOL_DB_PATH", "data/app.db")
+# Streamlit Community Cloud上ではGitHubから取り込んだソースツリー(/mount/src/...)が
+# 書き込み禁止のため、そこにSQLiteファイルを作成できない。OS標準の一時ディレクトリ配下に
+# 保存する(=書き込みは確実に通るが、再デプロイ・再起動でデータは消える/永続化されない)。
+# 本番運用では永続ボリュームまたは外部DB(例: Postgres)への切り替えが必要(既知の制約)。
+DB_PATH = os.environ.get("ESTIMATE_TOOL_DB_PATH") or os.path.join(tempfile.gettempdir(), "estimate_tool", "app.db")
 _engine = None
 _SessionLocal: sessionmaker[Session] | None = None
 

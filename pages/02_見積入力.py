@@ -192,12 +192,21 @@ line_items_df = st.data_editor(
     column_config={
         "請求科目": st.column_config.SelectboxColumn(options=billing_item_names, required=False),
         "社保加入区分(社内用)": st.column_config.SelectboxColumn(options=["済", "未", "外注"]),
-        "支払計算パターン": st.column_config.SelectboxColumn(options=patterns_for_contract),
         "人数": st.column_config.NumberColumn(min_value=0, step=1),
+        "請求日額単価": st.column_config.NumberColumn(format="¥%d", min_value=0, step=100),
+        "請求日数": st.column_config.NumberColumn(min_value=0, step=1),
+        "支払計算パターン": st.column_config.SelectboxColumn(options=patterns_for_contract),
+        "支払単価": st.column_config.NumberColumn(format="¥%d", min_value=0, step=100),
+        "数量1": st.column_config.NumberColumn(min_value=0, step=1),
+        "数量2": st.column_config.NumberColumn(min_value=0, step=1),
+        "数量3": st.column_config.NumberColumn(min_value=0, step=1),
     },
     key="line_items_editor",
 )
-st.session_state["line_items_df"] = line_items_df
+# ここで st.session_state["line_items_df"] に編集結果を書き戻さないこと。
+# data_editorのdata引数と同じキーへ毎回書き戻すと、1回目の編集が表示に反映されず
+# 2回目でようやく反映される不具合が起きる(Streamlitの既知の挙動)。
+# 編集結果はこの後の計算処理でローカル変数 line_items_df をそのまま使う。
 
 # ---------------------------------------------------------------
 # 経費行
@@ -230,11 +239,15 @@ cost_lines_df = st.data_editor(
     use_container_width=True,
     column_config={
         "計算パターン": st.column_config.SelectboxColumn(options=all_patterns),
+        "単価": st.column_config.NumberColumn(format="¥%d", min_value=0, step=100),
+        "数量1": st.column_config.NumberColumn(min_value=0, step=1),
+        "数量2": st.column_config.NumberColumn(min_value=0, step=1),
+        "数量3": st.column_config.NumberColumn(min_value=0, step=1),
         "区分": st.column_config.SelectboxColumn(options=["イニシャル", "ランニング"]),
     },
     key="cost_lines_editor",
 )
-st.session_state["cost_lines_df"] = cost_lines_df
+# line_items_dfと同じ理由で、st.session_state["cost_lines_df"]への書き戻しはしない。
 if record_type != "確定見積":
     st.caption("確定見積以外では「区分(イニシャル/ランニング)」は無視され、集計にのみ利用します。")
 

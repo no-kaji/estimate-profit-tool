@@ -114,6 +114,14 @@ InsuranceRateMaster / BillingItemMaster / CancellationPolicyMaster。
   `.streamlit/config.toml`でベースカラーも調整。
 - ログイン画面(`app/auth.py`の`require_login`)を中央寄せのカードレイアウトに変更。
 
+## 2026-08-05 追加修正: 単価の円表示・data_editorの二重入力バグ
+
+- 明細行・経費行の単価欄に`format="¥%d"`を明示し、既定で円表示になるようにした。
+- `pages/02_見積入力.py`で、`st.data_editor`の戻り値を毎回同じ`st.session_state`キー
+  (dataの入力元と同じキー)へ書き戻していたため、1回目の編集が画面に反映されず
+  2回目でようやく反映される不具合があった。書き戻しをやめ、初回読み込み時の値のみを
+  `st.session_state`に保持する方式に修正。
+
 ## 次のアクション
 
 - GitHubリポジトリを作成しコードをpush、Streamlit Community Cloudでデプロイして

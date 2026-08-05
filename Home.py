@@ -5,7 +5,7 @@ from app.db import init_db, get_session
 from app.seed import DEFAULT_ADMIN_PASSWORD, DEFAULT_ADMIN_USERNAME, seed_if_empty
 from app.ui import apply_theme
 
-st.set_page_config(page_title="見積収支計算書ツール", page_icon="📊", layout="wide")
+st.set_page_config(page_title="収支ワークフローツール", page_icon="📊", layout="wide")
 
 init_db()
 session = get_session()
@@ -15,7 +15,7 @@ user = require_login(session)
 apply_theme()
 with log_errors(session, "Home", user):
     logout_button()
-    st.title("見積収支計算書ツール")
+    st.title("収支ワークフローツール")
     st.caption(f"ログイン中: {user.display_name}({user.role})")
 
     st.markdown(

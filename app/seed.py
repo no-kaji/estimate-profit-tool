@@ -18,7 +18,7 @@ from app.models import (
 )
 
 DEFAULT_ADMIN_USERNAME = "admin"
-DEFAULT_ADMIN_PASSWORD = "ChangeMe123"  # 初回ログイン後、必ず変更してください
+DEFAULT_ADMIN_PASSWORD = "backstest"  # 初回ログイン後、必ず変更してください
 
 PRICING_PATTERNS = [
     {"name": "人日×日数", "qty1_label": "日数", "qty2_label": None, "qty3_label": None},

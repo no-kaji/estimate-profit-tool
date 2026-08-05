@@ -40,9 +40,13 @@ def require_login(session: Session) -> User:
     apply_theme()
     st.markdown(
         """
+        <style>
+        section[data-testid="stSidebar"] { display: none !important; }
+        div[data-testid="stSidebarCollapsedControl"] { display: none !important; }
+        </style>
         <div style="max-width:420px;margin:8vh auto 0;text-align:center;">
             <div style="font-size:44px;line-height:1;">📊</div>
-            <h1 style="margin:8px 0 2px;">見積収支計算書ツール</h1>
+            <h1 style="margin:8px 0 2px;">収支ワークフローツール</h1>
             <p style="color:#7a739e;margin-top:0;">社内アカウントでログインしてください</p>
         </div>
         """,

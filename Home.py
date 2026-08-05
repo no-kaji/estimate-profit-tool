@@ -3,6 +3,7 @@ import streamlit as st
 from app.auth import get_current_user, log_errors, logout_button, require_login
 from app.db import init_db, get_session
 from app.seed import DEFAULT_ADMIN_PASSWORD, DEFAULT_ADMIN_USERNAME, seed_if_empty
+from app.ui import apply_theme
 
 st.set_page_config(page_title="見積収支計算書ツール", page_icon="📊", layout="wide")
 
@@ -11,6 +12,7 @@ session = get_session()
 seed_if_empty(session)
 
 user = require_login(session)
+apply_theme()
 with log_errors(session, "Home", user):
     logout_button()
     st.title("見積収支計算書ツール")

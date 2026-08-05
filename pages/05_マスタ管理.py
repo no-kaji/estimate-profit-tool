@@ -12,11 +12,13 @@ from app.models import (
     InsuranceRateMaster,
     PricingPattern,
 )
+from app.ui import apply_theme
 
 st.set_page_config(page_title="マスタ管理 | 見積収支計算書ツール", page_icon="📊", layout="wide")
 init_db()
 session = get_session()
 user = require_login(session)
+apply_theme()
 logout_button()
 
 st.title("マスタ管理")

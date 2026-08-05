@@ -6,11 +6,13 @@ from sqlalchemy import select
 from app.auth import log_errors, logout_button, require_login
 from app.db import get_session, init_db
 from app.models import CostLine, FinancialRecord, LineItem, Project
+from app.ui import apply_theme
 
 st.set_page_config(page_title="案件一覧 | 見積収支計算書ツール", page_icon="📊", layout="wide")
 init_db()
 session = get_session()
 user = require_login(session)
+apply_theme()
 logout_button()
 
 st.title("案件一覧")

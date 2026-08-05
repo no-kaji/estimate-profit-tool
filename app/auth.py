@@ -35,19 +35,33 @@ def require_login(session: Session) -> User:
     if user is not None and user.active:
         return user
 
-    st.title("見積収支計算書ツール")
-    st.subheader("ログイン")
-    with st.form("login_form"):
-        username = st.text_input("ユーザーID")
-        password = st.text_input("パスワード", type="password")
-        submitted = st.form_submit_button("ログイン")
-    if submitted:
-        candidate = session.query(User).filter(User.username == username, User.active.is_(True)).one_or_none()
-        if candidate is not None and verify_password(password, candidate.password_hash):
-            st.session_state["auth_user_id"] = candidate.id
-            st.rerun()
-        else:
-            st.error("ユーザーIDまたはパスワードが正しくありません。")
+    from app.ui import apply_theme  # 遅延importでauth<->ui間の循環を避ける
+
+    apply_theme()
+    st.markdown(
+        """
+        <div style="max-width:420px;margin:8vh auto 0;text-align:center;">
+            <div style="font-size:44px;line-height:1;">📊</div>
+            <h1 style="margin:8px 0 2px;">見積収支計算書ツール</h1>
+            <p style="color:#7a739e;margin-top:0;">社内アカウントでログインしてください</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    _, mid, _ = st.columns([1, 1.3, 1])
+    with mid:
+        with st.container(border=True):
+            with st.form("login_form"):
+                username = st.text_input("ユーザーID", placeholder="admin")
+                password = st.text_input("パスワード", type="password", placeholder="••••••••")
+                submitted = st.form_submit_button("ログイン", type="primary", use_container_width=True)
+        if submitted:
+            candidate = session.query(User).filter(User.username == username, User.active.is_(True)).one_or_none()
+            if candidate is not None and verify_password(password, candidate.password_hash):
+                st.session_state["auth_user_id"] = candidate.id
+                st.rerun()
+            else:
+                st.error("ユーザーIDまたはパスワードが正しくありません。")
     st.stop()
     raise RuntimeError("unreachable")  # st.stop()で必ず終了するが型チェッカー向けに明示
 

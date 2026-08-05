@@ -103,6 +103,17 @@ InsuranceRateMaster / BillingItemMaster / CancellationPolicyMaster。
 `02_見積入力.py`・`05_マスタ管理.py`・`06_システム管理.py`は分量が大きくログイン処理のみ
 追加し、例外捕捉のラップは行っていない(全面適用は次回)。
 
+## 2026-08-05 追加修正: スキーマ不一致エラーの解消・全体デザインの調整
+
+- `app/db.py`: マイグレーション機構がないため、起動時に既存DBのテーブル/カラムと
+  現在のモデル定義を比較し、不一致(例: 前回デプロイ後にモデルへ列を追加した)があれば
+  自動的にDBを作り直す(`_schema_matches`)処理を追加。Streamlit Cloud上のDBは
+  もともと一時領域で永続化しない前提のため、この方式で妥当と判断した。
+- `app/ui.py`(新規): 丸みのある見た目(Google Fonts「M PLUS Rounded 1c」、
+  ボタン・入力欄・カードの角丸)を全画面に適用する`apply_theme()`を追加。
+  `.streamlit/config.toml`でベースカラーも調整。
+- ログイン画面(`app/auth.py`の`require_login`)を中央寄せのカードレイアウトに変更。
+
 ## 次のアクション
 
 - GitHubリポジトリを作成しコードをpush、Streamlit Community Cloudでデプロイして

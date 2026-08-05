@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import tempfile
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import Base
@@ -32,5 +32,28 @@ def get_session() -> Session:
     return _SessionLocal()
 
 
+def _schema_matches(engine) -> bool:
+    """既存DBのテーブル/カラムが、現在のモデル定義と一致しているか確認する。
+
+    このアプリには本格的なマイグレーション機構がない(既知の制約)。
+    Streamlit Cloud上のDBはどのみち一時領域で永続化されないため、
+    スキーマ不一致を検知したら丸ごと作り直す方式にする。
+    """
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing_tables:
+            return False
+        existing_cols = {c["name"] for c in inspector.get_columns(table.name)}
+        expected_cols = {c.name for c in table.columns}
+        if not expected_cols.issubset(existing_cols):
+            return False
+    return True
+
+
 def init_db() -> None:
-    Base.metadata.create_all(get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    if not _schema_matches(engine):
+        Base.metadata.drop_all(engine)
+        Base.metadata.create_all(engine)

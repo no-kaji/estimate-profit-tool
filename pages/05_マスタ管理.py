@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import select
 
+from app.auth import logout_button, require_login
 from app.db import get_session, init_db
 from app.models import (
     BillingItemMaster,
@@ -15,6 +16,8 @@ from app.models import (
 st.set_page_config(page_title="マスタ管理 | 見積収支計算書ツール", page_icon="📊", layout="wide")
 init_db()
 session = get_session()
+user = require_login(session)
+logout_button()
 
 st.title("マスタ管理")
 

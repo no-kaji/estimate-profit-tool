@@ -285,6 +285,66 @@ QAで再確認する。
 相当する項目がないため、見積・実績レコード作成画面に新規入力項目として追加する
 (Designerへの申し送り事項)。
 
+## ADR-5: 権限ロール・組織属性・論理削除(2026-08-05追加)
+
+- **背景**: 削除操作の権限を役職によって分けたい(システム管理者/マネージャー/ユーザー)。
+  削除は取り消せる必要があり、システム管理者はアプリのエラーログも確認したい。
+  さらにユーザーごとに統括部門・拠点(組織属性)を割り当てたい。
+- **認証方式**: Streamlit Community Cloud自体には社内ユーザー向けの認証基盤がないため、
+  アプリ内にID/パスワードのログイン機構を実装する(`app/auth.py`)。パスワードは
+  簡易ハッシュ化(sha256+salt)で保存する軽量実装とし、社外公開や高いセキュリティ要件が
+  発生した場合はSSO(Microsoft Entra ID等)への切替を別途検討する(既知の制約)。
+- **ロールと権限**:
+
+  | ロール | 削除 | 復旧 | エラーログ閲覧 |
+  |---|---|---|---|
+  | システム管理者 | ○ | ○ | ○ |
+  | マネージャー | ○ | × | × |
+  | ユーザー | × | × | × |
+
+- **論理削除**: PROJECT・FINANCIAL_RECORDに`deleted_at`(NULL可)を追加。削除は
+  `deleted_at`に日時をセットするのみ(物理削除しない)。一覧画面は`deleted_at IS NULL`の
+  行のみ表示し、システム管理者には削除済み一覧(ゴミ箱)と復旧操作を提供する。
+- **組織属性**: 統括部門名称マスタ(`HeadquartersMaster`)・拠点名称マスタ
+  (`BranchMaster`)を新設し、`User`に`headquarters_id`・`branch_id`を持たせる。
+  既存のFINANCIAL_RECORD.headquarters_name(経営ボード明細用の自由入力)とは別物として扱う
+  (将来的にはユーザーの所属部門をFINANCIAL_RECORD入力時のデフォルト値として使う拡張が可能)。
+- **エラーログ**: `ErrorLog`(発生日時・ユーザー・メッセージ)を新設し、各画面のトップレベルで
+  例外を捕捉して記録する簡易実装とする。外部ログ基盤(Sentry等)の導入は将来検討。
+
+```mermaid
+erDiagram
+    USER }o--o| HeadquartersMaster : belongs_to
+    USER }o--o| BranchMaster : belongs_to
+
+    USER {
+        int id PK
+        string username "ログインID"
+        string display_name
+        string password_hash
+        string role "システム管理者/マネージャー/ユーザー"
+        int headquarters_id FK
+        int branch_id FK
+        boolean active
+    }
+    HeadquartersMaster {
+        int id PK
+        string name "統括部門名称"
+    }
+    BranchMaster {
+        int id PK
+        string name "拠点名称"
+    }
+    ErrorLog {
+        int id PK
+        datetime occurred_at
+        int user_id FK
+        string message
+    }
+```
+
+PROJECT・FINANCIAL_RECORDには`deleted_at: datetime | None`を追加する(上記の論理削除)。
+
 ## ADR-3: 出力方式(PDF/Excel/経営ボード明細レコード)
 
 - **見積書PDF/Excel**: openpyxlで社内指定の見積書レイアウト(Excelテンプレート)に

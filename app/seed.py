@@ -2,15 +2,23 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.auth import hash_password
 from app.db import get_session, init_db
 from app.models import (
+    ROLE_SYSTEM_ADMIN,
     BillingItemMaster,
+    BranchMaster,
     CancellationPolicyMaster,
     ContractType,
     ContractTypePattern,
+    HeadquartersMaster,
     InsuranceRateMaster,
     PricingPattern,
+    User,
 )
+
+DEFAULT_ADMIN_USERNAME = "admin"
+DEFAULT_ADMIN_PASSWORD = "ChangeMe123"  # 初回ログイン後、必ず変更してください
 
 PRICING_PATTERNS = [
     {"name": "人日×日数", "qty1_label": "日数", "qty2_label": None, "qty3_label": None},
@@ -92,6 +100,28 @@ def seed_if_empty(session: Session) -> None:
     if session.query(CancellationPolicyMaster).count() == 0:
         for c in CANCELLATION_POLICIES:
             session.add(CancellationPolicyMaster(**c))
+
+    if session.query(HeadquartersMaster).count() == 0:
+        session.add(HeadquartersMaster(name="本社"))
+
+    if session.query(BranchMaster).count() == 0:
+        session.add(BranchMaster(name="本店"))
+
+    session.flush()
+
+    if session.query(User).count() == 0:
+        hq = session.query(HeadquartersMaster).first()
+        branch = session.query(BranchMaster).first()
+        session.add(
+            User(
+                username=DEFAULT_ADMIN_USERNAME,
+                display_name="システム管理者",
+                password_hash=hash_password(DEFAULT_ADMIN_PASSWORD),
+                role=ROLE_SYSTEM_ADMIN,
+                headquarters_id=hq.id if hq else None,
+                branch_id=branch.id if branch else None,
+            )
+        )
 
     session.commit()
 

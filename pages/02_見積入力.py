@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import select
 
+from app.auth import logout_button, require_login
 from app.db import get_session, init_db
 from app.models import (
     BillingItemMaster,
@@ -29,13 +30,15 @@ from app.services.calc import (
 st.set_page_config(page_title="見積入力 | 見積収支計算書ツール", page_icon="📊", layout="wide")
 init_db()
 session = get_session()
+user = require_login(session)
+logout_button()
 
 st.title("見積入力")
 
 # ---------------------------------------------------------------
 # 案件の選択(01_案件一覧を経由しない直接アクセスにも対応)
 # ---------------------------------------------------------------
-projects = session.execute(select(Project)).scalars().all()
+projects = session.execute(select(Project).where(Project.deleted_at.is_(None))).scalars().all()
 if not projects:
     st.warning("案件が登録されていません。先に「01_案件一覧」から新規案件を登録してください。")
     st.stop()

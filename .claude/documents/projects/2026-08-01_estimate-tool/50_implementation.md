@@ -78,6 +78,31 @@ InsuranceRateMaster / BillingItemMaster / CancellationPolicyMaster。
 | Streamlit起動確認 | **未実施** |
 | 雛形との数値突き合わせ | **未実施** |
 
+## 2026-08-05 追加実装: 権限ロール・組織属性・論理削除
+
+- `app/auth.py`: 簡易ログイン(ID/パスワード、sha256ハッシュ)、`require_login`、
+  ロール別権限判定(`User.can_delete`/`can_restore`/`can_view_logs`/`can_manage_users`)、
+  `log_errors`(例外をErrorLogへ記録するコンテキストマネージャ)を実装。
+- `models.py`: `User`・`HeadquartersMaster`・`BranchMaster`・`ErrorLog`を追加、
+  `Project`・`FinancialRecord`に`deleted_at`(論理削除)を追加。
+- `pages/01_案件一覧.py`: 削除(論理削除)ボタンを追加(システム管理者・マネージャーのみ表示)。
+  システム管理者には「削除済み案件(ゴミ箱)を表示」トグルと復旧ボタンを追加。
+- `pages/06_システム管理.py`(新規、システム管理者専用): ユーザー管理(ロール・組織属性の
+  割り当て、パスワード再設定、新規登録)、統括部門・拠点マスタ編集、エラーログ閲覧。
+- `seed.py`: 初回起動時に既定のシステム管理者アカウント
+  (ID: `admin` / 初期パスワード: `ChangeMe123`)を自動作成。
+
+**重要なセキュリティ上の注意**: このリポジトリは現在GitHub上でPublic(公開)設定になっている。
+初期管理者アカウントの初期パスワードはソースコード(`app/seed.py`)にそのまま書かれており、
+誰でも閲覧できる状態にある。**初回ログイン後、必ずシステム管理者パスワードを
+06_システム管理から変更すること**(アプリ側にも警告バナーを表示する実装済み)。
+恒久対応としては、パスワードを環境変数/Secretsで注入する方式への変更、または
+リポジトリをprivate化した上でのGitHub App権限再設定を推奨する(次回検討事項)。
+
+**未カバー範囲**: エラーログ記録(`log_errors`)は`Home.py`と`01_案件一覧.py`にのみ適用した。
+`02_見積入力.py`・`05_マスタ管理.py`・`06_システム管理.py`は分量が大きくログイン処理のみ
+追加し、例外捕捉のラップは行っていない(全面適用は次回)。
+
 ## 次のアクション
 
 - GitHubリポジトリを作成しコードをpush、Streamlit Community Cloudでデプロイして

@@ -94,6 +94,74 @@ class CancellationPolicyMaster(Base):
     policy_text_internal: Mapped[str] = mapped_column(default="")
 
 
+class HeadquartersMaster(Base):
+    """組織属性: 統括部門名称マスタ。ユーザーの所属割り当てに使う。"""
+
+    __tablename__ = "headquarters_masters"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(unique=True)
+
+
+class BranchMaster(Base):
+    """組織属性: 拠点名称マスタ。ユーザーの所属割り当てに使う。"""
+
+    __tablename__ = "branch_masters"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(unique=True)
+
+
+ROLE_SYSTEM_ADMIN = "システム管理者"
+ROLE_MANAGER = "マネージャー"
+ROLE_USER = "ユーザー"
+ROLES = [ROLE_SYSTEM_ADMIN, ROLE_MANAGER, ROLE_USER]
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(unique=True)
+    display_name: Mapped[str] = mapped_column(default="")
+    password_hash: Mapped[str] = mapped_column(default="")
+    role: Mapped[str] = mapped_column(default=ROLE_USER)
+    headquarters_id: Mapped[int | None] = mapped_column(ForeignKey("headquarters_masters.id"), default=None)
+    branch_id: Mapped[int | None] = mapped_column(ForeignKey("branch_masters.id"), default=None)
+    active: Mapped[bool] = mapped_column(default=True)
+
+    headquarters: Mapped["HeadquartersMaster | None"] = relationship()
+    branch: Mapped["BranchMaster | None"] = relationship()
+
+    @property
+    def can_delete(self) -> bool:
+        return self.role in (ROLE_SYSTEM_ADMIN, ROLE_MANAGER)
+
+    @property
+    def can_restore(self) -> bool:
+        return self.role == ROLE_SYSTEM_ADMIN
+
+    @property
+    def can_view_logs(self) -> bool:
+        return self.role == ROLE_SYSTEM_ADMIN
+
+    @property
+    def can_manage_users(self) -> bool:
+        return self.role == ROLE_SYSTEM_ADMIN
+
+
+class ErrorLog(Base):
+    __tablename__ = "error_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    occurred_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
+    page: Mapped[str] = mapped_column(default="")
+    message: Mapped[str] = mapped_column(default="")
+
+    user: Mapped["User | None"] = relationship()
+
+
 class Project(Base):
     __tablename__ = "projects"
 
@@ -105,6 +173,7 @@ class Project(Base):
     contract_start: Mapped[dt.date | None] = mapped_column(default=None)
     contract_end: Mapped[dt.date | None] = mapped_column(default=None)
     copied_from_project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), default=None)
+    deleted_at: Mapped[dt.datetime | None] = mapped_column(default=None)
 
     financial_records: Mapped[list["FinancialRecord"]] = relationship(back_populates="project")
 
@@ -127,6 +196,7 @@ class FinancialRecord(Base):
     order_status: Mapped[str] = mapped_column(default="")
     unit_name: Mapped[str] = mapped_column(default="")
     headquarters_name: Mapped[str] = mapped_column(default="")
+    deleted_at: Mapped[dt.datetime | None] = mapped_column(default=None)
     created_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow)
 

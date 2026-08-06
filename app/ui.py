@@ -120,6 +120,27 @@ nav[data-testid="stSidebarNav"] a[aria-current="page"] p {
     font-weight: 800 !important;
 }
 
+/* ナビゲーション項目の文字を一回り大きくし、項目同士の間隔も広げて読みやすくする */
+section[data-testid="stSidebarNav"] a p,
+div[data-testid="stSidebarNavItems"] a p,
+nav[data-testid="stSidebarNav"] a p,
+section[data-testid="stSidebar"] li a p {
+    font-size: 1.05rem !important;
+}
+section[data-testid="stSidebarNav"] li,
+div[data-testid="stSidebarNavItems"] li,
+nav[data-testid="stSidebarNav"] li,
+section[data-testid="stSidebar"] li {
+    margin-bottom: 6px;
+}
+section[data-testid="stSidebarNav"] a,
+div[data-testid="stSidebarNavItems"] a,
+nav[data-testid="stSidebarNav"] a,
+section[data-testid="stSidebar"] li a {
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+}
+
 /* アイコンとテキストをそれぞれ別々に拡大すると、間隔が詰まって重なって見えるため、
    個別に拡大するのではなくリンク全体を1つのグループとしてまとめて拡大する。
    左端を基準に拡大することで、サイドバーの左端に食い込まず自然に大きくなる。 */

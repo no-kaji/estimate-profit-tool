@@ -23,7 +23,7 @@ pages = [
     st.Page("app_pages/01_案件一覧.py", title="案件一覧", icon=":material/folder_open:"),
     st.Page("app_pages/02_見積入力.py", title="見積入力", icon=":material/edit_note:"),
     st.Page("app_pages/10_収支管理.py", title="収支管理", icon=":material/payments:"),
-    st.Page("app_pages/11_経営ボード明細出力.py", title="経営ボード明細出力", icon=":material/monitoring:"),
+    st.Page("app_pages/11_経営ボード明細出力.py", title="データ連携", icon=":material/monitoring:"),
 ]
 if user.role != ROLE_SYSTEM_ADMIN:
     pages.append(st.Page("app_pages/07_マイページ.py", title="マイページ", icon=":material/person:"))

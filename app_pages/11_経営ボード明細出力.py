@@ -15,7 +15,7 @@ user = require_login(session)
 apply_theme()
 logout_button()
 
-st.title("経営ボード明細出力")
+st.title("データ連携")
 st.caption(
     "「収支管理」で受注として確定した確定見積(予算)と、その週次実績(実績)を、"
     "経営ボード明細.xlsxと同じ列構成で出力します(失注・未定の確定見積は対象外です)。"

@@ -81,6 +81,21 @@ def test_calc_line_item_headcount_multiplies_cost_and_sales():
     assert result.payment_base == 1000 * 8 * 5 * 3
 
 
+def test_calc_line_item_daily_overtime_over_8_hours():
+    # 1日の時間数が法定8時間を超える分は1.25倍(労働基準法37条)
+    item = LineItemInput(
+        billing_daily_rate=0,
+        billing_days=0,
+        headcount=1,
+        payment_hourly_rate=1000,
+        hours_per_day=10,
+        payment_days=1,
+    )
+    result = calc_line_item(item, insurance_total_rate=0.0)
+    expected = 1000 * (8 + 2 * 1.25)
+    assert result.payment_base == expected
+
+
 def test_calc_cost_line_amount():
     item = CostLineInput(rate=15000, qty1=None, qty2=None, qty3=None)
     assert calc_cost_line_amount(item) == 15000

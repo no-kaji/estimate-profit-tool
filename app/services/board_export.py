@@ -127,7 +127,7 @@ def build_confirmed_estimate_rows(session: Session, record: FinancialRecord) -> 
                 "常勤数": headcount,
                 "販売管理費": record.sga_cost,
                 "ポジ数": 0,
-                "受注状況": record.order_status,
+                "受注状況": record.order_result,
                 "ユニット名称": record.unit_name,
                 "QT": _qt_of(month),
             }
@@ -168,7 +168,7 @@ def build_actual_rows(session: Session, record: FinancialRecord) -> list[dict]:
                 "常勤数": agg["reg"],
                 "販売管理費": agg["sga"],
                 "ポジ数": agg["pos"],
-                "受注状況": record.order_status,
+                "受注状況": record.order_result,
                 "ユニット名称": record.unit_name,
                 "QT": _qt_of(month_date),
             }
@@ -177,9 +177,12 @@ def build_actual_rows(session: Session, record: FinancialRecord) -> list[dict]:
 
 
 def build_board_dataframe(session: Session, records: list[FinancialRecord]) -> pd.DataFrame:
+    """経営ボード明細の対象は「確定見積」かつ「受注」が確定したレコードのみ
+    (収支管理は受注した案件のみを扱う方針のため、失注・未定は対象外)。
+    """
     rows: list[dict] = []
     for record in records:
-        if record.record_type != "確定見積":
+        if record.record_type != "確定見積" or record.order_result != "受注":
             continue
         rows.extend(build_confirmed_estimate_rows(session, record))
         rows.extend(build_actual_rows(session, record))

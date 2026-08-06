@@ -63,7 +63,12 @@ def calc_line_item(item: LineItemInput, insurance_total_rate: float) -> LineItem
         + item.billing_allowance_monthly
     ) * item.headcount
 
-    payment_base = item.payment_hourly_rate * item.hours_per_day * item.payment_days * item.headcount
+    # 法定労働時間(1日8時間)を超える分は割増賃金(1.25倍)とする(労働基準法37条)。
+    LEGAL_DAILY_HOURS = 8.0
+    regular_hours = min(item.hours_per_day, LEGAL_DAILY_HOURS)
+    daily_overtime_hours = max(item.hours_per_day - LEGAL_DAILY_HOURS, 0.0)
+    daily_pay_per_head = item.payment_hourly_rate * (regular_hours + daily_overtime_hours * item.overtime_multiplier)
+    payment_base = daily_pay_per_head * item.payment_days * item.headcount
 
     hourly_rate = item.payment_hourly_rate
     overtime_pay = hourly_rate * item.overtime_hours_monthly * item.overtime_multiplier * item.headcount

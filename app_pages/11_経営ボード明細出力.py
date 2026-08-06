@@ -17,7 +17,8 @@ logout_button()
 
 st.title("経営ボード明細出力")
 st.caption(
-    "確定見積(予算)と週次実績(実績)を、経営ボード明細.xlsxと同じ列構成で出力します。"
+    "「収支管理」で受注として確定した確定見積(予算)と、その週次実績(実績)を、"
+    "経営ボード明細.xlsxと同じ列構成で出力します(失注・未定の確定見積は対象外です)。"
     "現時点ではSharePoint/Power BIへの自動反映は行っていないため、出力したファイルを"
     "既存のSharePoint上のファイルへ手動で反映してください(自動連携はMicrosoft Graph APIの"
     "アプリ登録が必要なため別途検討中です)。"
@@ -31,12 +32,12 @@ selected_ids = st.multiselect(
     format_func=lambda i: project_labels[i],
 )
 
-query = select(FinancialRecord).where(FinancialRecord.record_type == "確定見積")
+query = select(FinancialRecord).where(FinancialRecord.record_type == "確定見積", FinancialRecord.order_result == "受注")
 if selected_ids:
     query = query.where(FinancialRecord.project_id.in_(selected_ids))
 records = session.execute(query).scalars().all()
 
-st.write(f"対象の確定見積レコード数: {len(records)}")
+st.write(f"対象の確定見積(受注済み)レコード数: {len(records)}")
 
 if st.button("プレビューを生成", type="primary"):
     df = build_board_dataframe(session, records)

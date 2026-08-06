@@ -28,13 +28,32 @@ if user.seal_svg:
     st.markdown(seal_img_tag(user.seal_svg, size=110), unsafe_allow_html=True)
     st.caption("現在登録されている個人印鑑です。")
 else:
-    st.info("まだ個人印鑑が生成されていません。下のボタンから生成してください。")
+    st.info("まだ個人印鑑が登録されていません。下の欄から作成してください。")
 
-if st.button("個人印鑑を生成 / 再生成"):
-    user.seal_svg = generate_personal_seal_svg(user.display_name or user.username)
-    session.commit()
-    st.success("個人印鑑を生成しました。")
-    st.rerun()
+seal_name = st.text_input("印鑑に表示する氏名", value=user.display_name or "")
+if st.button("生成"):
+    if seal_name:
+        st.session_state["_pending_seal_svg"] = generate_personal_seal_svg(seal_name)
+        st.session_state["_pending_seal_name"] = seal_name
+    else:
+        st.error("氏名を入力してください。")
+
+pending_svg = st.session_state.get("_pending_seal_svg")
+if pending_svg:
+    st.caption(f"プレビュー(「{st.session_state.get('_pending_seal_name')}」で生成):")
+    st.markdown(seal_img_tag(pending_svg, size=110), unsafe_allow_html=True)
+    reg_col1, reg_col2 = st.columns(2)
+    if reg_col1.button("登録", type="primary"):
+        user.seal_svg = pending_svg
+        session.commit()
+        st.session_state.pop("_pending_seal_svg", None)
+        st.session_state.pop("_pending_seal_name", None)
+        st.success("個人印鑑を登録しました。")
+        st.rerun()
+    if reg_col2.button("やり直す"):
+        st.session_state.pop("_pending_seal_svg", None)
+        st.session_state.pop("_pending_seal_name", None)
+        st.rerun()
 
 st.divider()
 st.subheader("自分が作成した見積もりの履歴")

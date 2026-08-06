@@ -94,6 +94,24 @@ class CancellationPolicyMaster(Base):
     policy_text_internal: Mapped[str] = mapped_column(default="")
 
 
+class SegmentMaster(Base):
+    """経営ボード明細用: セグメントマスタ。"""
+
+    __tablename__ = "segment_masters"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(unique=True)
+
+
+class ProductMaster(Base):
+    """経営ボード明細用: 商材マスタ。"""
+
+    __tablename__ = "product_masters"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(unique=True)
+
+
 class HeadquartersMaster(Base):
     """組織属性: 統括部門名称マスタ。ユーザーの所属割り当てに使う。"""
 
@@ -244,6 +262,10 @@ class FinancialRecord(Base):
     headquarters_name: Mapped[str] = mapped_column(default="")
     employment_type: Mapped[str] = mapped_column(default="")  # 常勤・CA(見積単位の単一選択、経営ボード明細用)
     deleted_at: Mapped[dt.datetime | None] = mapped_column(default=None)
+
+    # 受注結果(確定見積のみ対象。収支管理は受注したレコードのみを対象とする)
+    order_result: Mapped[str] = mapped_column(default="未定")  # 未定/受注/失注
+    lost_reason: Mapped[str | None] = mapped_column(default=None)
 
     # 承認フロー(確定見積の見積書発行用): 下書き -> 申請中 -> 承認済み/却下
     # マネージャー・システム管理者が自ら作成した場合は申請不要でその場で承認済みにできる。

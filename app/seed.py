@@ -14,7 +14,9 @@ from app.models import (
     HeadquartersMaster,
     InsuranceRateMaster,
     PricingPattern,
+    ProductMaster,
     RegionMaster,
+    SegmentMaster,
     User,
 )
 
@@ -75,6 +77,9 @@ CANCELLATION_POLICIES = [
     {"policy_name": "覚書で締結済", "policy_text_client": "(覚書の定めによる)", "policy_text_internal": ""},
 ]
 
+SEGMENTS = ["OS", "派遣", "その他"]
+PRODUCTS = ["デジタル", "金融", "日用品", "アパレル", "食品"]
+
 
 def seed_if_empty(session: Session) -> None:
     if session.query(PricingPattern).count() == 0:
@@ -110,6 +115,14 @@ def seed_if_empty(session: Session) -> None:
 
     if session.query(RegionMaster).count() == 0:
         session.add(RegionMaster(name="全国"))
+
+    if session.query(SegmentMaster).count() == 0:
+        for s in SEGMENTS:
+            session.add(SegmentMaster(name=s))
+
+    if session.query(ProductMaster).count() == 0:
+        for p in PRODUCTS:
+            session.add(ProductMaster(name=p))
 
     session.flush()
 

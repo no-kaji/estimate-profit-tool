@@ -16,35 +16,103 @@ apply_theme()
 logout_button()
 
 st.title("収支管理")
-st.caption("確定見積を選び、実績値を週単位で入力します。月次に合算して経営ボード明細形式で出力できます。")
+st.caption(
+    "収支管理は「受注した」確定見積に対して実績を入力する仕組みです。"
+    "まず確定見積ごとに受注/失注を選び、受注したものだけを対象に週次実績を入力します。"
+)
 
-projects = session.execute(select(Project).where(Project.deleted_at.is_(None))).scalars().all()
-if not projects:
-    st.info("案件が登録されていません。先に案件と確定見積を作成してください。")
-    st.stop()
+# ---------------------------------------------------------------
+# Step 1: 確定見積一覧 → 受注/失注を選択
+# ---------------------------------------------------------------
+st.subheader("Step 1. 確定見積一覧(受注・失注の選択)")
 
-project_labels = {p.id: f"{p.project_name or '(未設定)'}({p.dept} / {p.client_name})" for p in projects}
-project_id = st.selectbox("案件", options=list(project_labels.keys()), format_func=lambda i: project_labels[i])
-
-confirmed_records = session.execute(
+all_confirmed = session.execute(
     select(FinancialRecord).where(
-        FinancialRecord.project_id == project_id,
         FinancialRecord.record_type == "確定見積",
+        FinancialRecord.deleted_at.is_(None),
     )
 ).scalars().all()
 
-if not confirmed_records:
-    st.info("この案件にはまだ確定見積がありません。「02_見積入力」で確定見積を作成してください。")
+if not all_confirmed:
+    st.info("確定見積がまだありません。先に「見積入力」で確定見積を作成してください。")
+    st.stop()
+
+
+@st.dialog("受注の確定")
+def _confirm_won_dialog(record_id: int):
+    rec = session.get(FinancialRecord, record_id)
+    st.write(f"「{rec.project.project_name}」({rec.project.client_name})を**受注**として記録しますか?")
+    c1, c2 = st.columns(2)
+    if c1.button("受注として確定する", type="primary", use_container_width=True):
+        rec.order_result = "受注"
+        rec.lost_reason = None
+        session.commit()
+        st.rerun()
+    if c2.button("キャンセル", use_container_width=True):
+        st.rerun()
+
+
+@st.dialog("失注の確定")
+def _confirm_lost_dialog(record_id: int):
+    rec = session.get(FinancialRecord, record_id)
+    st.write(f"「{rec.project.project_name}」({rec.project.client_name})を**失注**として記録します。")
+    reason = st.text_area("失注理由", placeholder="例: 価格競合に敗れた / 予算未確保 など")
+    c1, c2 = st.columns(2)
+    if c1.button("失注として確定する", type="primary", use_container_width=True):
+        if not reason:
+            st.error("失注理由を入力してください。")
+        else:
+            rec.order_result = "失注"
+            rec.lost_reason = reason
+            session.commit()
+            st.rerun()
+    if c2.button("キャンセル", use_container_width=True):
+        st.rerun()
+
+
+status_badge = {"未定": "⚪ 未定", "受注": "🟢 受注", "失注": "🔴 失注"}
+for rec in all_confirmed:
+    with st.container(border=True):
+        c1, c2, c3 = st.columns([3, 2, 2])
+        with c1:
+            st.markdown(f"**{rec.project.project_name or '(案件名未設定)'}**({rec.project.client_name})")
+            st.caption(f"{rec.period_start or '期間未定'}〜{rec.period_end or ''} / 承認: {rec.approval_status}")
+        with c2:
+            st.write(status_badge.get(rec.order_result, rec.order_result))
+            if rec.order_result == "失注" and rec.lost_reason:
+                st.caption(f"理由: {rec.lost_reason}")
+        with c3:
+            if rec.order_result == "未定":
+                b1, b2 = st.columns(2)
+                if b1.button("受注", key=f"won_{rec.id}", type="primary"):
+                    _confirm_won_dialog(rec.id)
+                if b2.button("失注", key=f"lost_{rec.id}"):
+                    _confirm_lost_dialog(rec.id)
+            else:
+                if st.button("未定に戻す", key=f"reset_{rec.id}"):
+                    rec.order_result = "未定"
+                    rec.lost_reason = None
+                    session.commit()
+                    st.rerun()
+
+# ---------------------------------------------------------------
+# Step 2: 受注した案件を選び、週次実績を入力
+# ---------------------------------------------------------------
+st.divider()
+st.subheader("Step 2. 週次実績の入力(受注した案件のみ)")
+
+won_records = [r for r in all_confirmed if r.order_result == "受注"]
+if not won_records:
+    st.info("受注として確定した確定見積がまだありません。上の一覧で「受注」を選ぶと、ここに対象が表示されます。")
+    session.close()
     st.stop()
 
 record_labels = {
-    r.id: f"{r.period_start or '期間未定'}〜{r.period_end or ''}({r.approval_status})" for r in confirmed_records
+    r.id: f"{r.project.project_name}({r.project.client_name}) / {r.period_start or '期間未定'}〜{r.period_end or ''}"
+    for r in won_records
 }
-record_id = st.selectbox("対象の確定見積", options=list(record_labels.keys()), format_func=lambda i: record_labels[i])
+record_id = st.selectbox("対象の確定見積(受注済み)", options=list(record_labels.keys()), format_func=lambda i: record_labels[i])
 record = session.get(FinancialRecord, record_id)
-
-st.divider()
-st.subheader("週次実績の入力")
 
 week_start = st.date_input("対象週(その週の月曜日を選択)", value=dt.date.today())
 week_start = week_start - dt.timedelta(days=week_start.weekday())  # 月曜日に丸める

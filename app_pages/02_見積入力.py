@@ -16,6 +16,8 @@ from app.models import (
     LineItem,
     PricingPattern,
     Project,
+    ProductMaster,
+    SegmentMaster,
     User,
 )
 from app.seal import seal_img_tag
@@ -137,8 +139,6 @@ record_type = st.radio(
     horizontal=True,
     index=["概算見積", "確定見積"].index(editing_record.record_type) if editing_record else 0,
 )
-st.caption("実績は「収支管理」メニューで、確定見積を選んで週次入力します。")
-
 period_start = period_end = None
 if record_type == "確定見積":
     pc1, pc2 = st.columns(2)
@@ -436,29 +436,49 @@ st.caption(
     "システム管理者にご相談ください)"
 )
 
+segment_options = [s.name for s in session.execute(select(SegmentMaster)).scalars().all()]
+product_options = [p.name for p in session.execute(select(ProductMaster)).scalars().all()]
+
 with st.expander("経営ボード明細用の追加項目(セグメント・商材・常勤/CA)"):
     d1, d2, d3 = st.columns(3)
-    segment = d1.text_input("セグメント", value=editing_record.segment if editing_record else "")
-    product = d2.text_input("商材", value=editing_record.product if editing_record else "")
+    segment_index = None
+    if segment_options:
+        segment_index = segment_options.index(editing_record.segment) if editing_record and editing_record.segment in segment_options else 0
+    product_index = None
+    if product_options:
+        product_index = product_options.index(editing_record.product) if editing_record and editing_record.product in product_options else 0
+    segment = d1.selectbox("セグメント", options=segment_options, index=segment_index)
+    product = d2.selectbox("商材", options=product_options, index=product_index)
     employment_type = d3.selectbox(
         "常勤・CA", options=["常勤", "CA"],
         index=(["常勤", "CA"].index(editing_record.employment_type) if editing_record and editing_record.employment_type in ("常勤", "CA") else 0),
     )
+    if not segment_options or not product_options:
+        st.caption("セグメント・商材の選択肢が未登録です。マスタ管理から追加してください。")
     st.caption("受注状況・ユニット名称は現在この画面では入力しません(不要とのご要望のため)。")
 
 # ---------------------------------------------------------------
 # 見積書プレビュー(顧客提出イメージ、原価・社内用情報は含まない)
+# ポップアップ(ダイアログ)で表示する。
 # ---------------------------------------------------------------
-st.subheader("見積書プレビュー")
-st.caption("お客様に提出する内容のイメージです。原価・契約形式・計算パターンなど社内用の情報は含みません。")
 preview_rows = line_preview_rows + cost_preview_rows
-if not preview_rows:
-    st.info("明細行または経費行を入力するとプレビューが表示されます。")
-else:
-    preview_df = pd.DataFrame(preview_rows)
-    preview_df["金額"] = preview_df["金額"].map(lambda v: f"¥{v:,.0f}")
-    st.dataframe(preview_df, use_container_width=True, hide_index=True)
-    st.markdown(f"**合計: ¥{summary.sales:,.0f}**")
+
+
+@st.dialog("見積書プレビュー", width="large")
+def _show_preview_dialog(rows: list[dict], total: float):
+    st.caption("お客様に提出する内容のイメージです。原価・契約形式・計算パターンなど社内用の情報は含みません。")
+    if not rows:
+        st.info("明細行または経費行を入力するとプレビューが表示されます。")
+    else:
+        preview_df = pd.DataFrame(rows)
+        preview_df["金額"] = preview_df["金額"].map(lambda v: f"¥{v:,.0f}")
+        st.dataframe(preview_df, use_container_width=True, hide_index=True)
+        st.markdown(f"**合計: ¥{total:,.0f}**")
+    st.caption("※このプレビューは簡易版です。顧客提出用のフォーマットは追ってご指定いただき次第反映します。")
+
+
+if st.button("見積書プレビューを表示"):
+    _show_preview_dialog(preview_rows, summary.sales)
 
 # ---------------------------------------------------------------
 # 保存
@@ -476,8 +496,8 @@ if st.button("保存", type="primary"):
     rec.period_end = period_end
     rec.headquarters_name = user.headquarters.name if user.headquarters else ""
     rec.region = user.region.name if user.region else ""
-    rec.segment = segment
-    rec.product = product
+    rec.segment = segment or ""
+    rec.product = product or ""
     rec.employment_type = employment_type
     session.flush()
 

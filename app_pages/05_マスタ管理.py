@@ -11,6 +11,8 @@ from app.models import (
     ContractTypePattern,
     InsuranceRateMaster,
     PricingPattern,
+    ProductMaster,
+    SegmentMaster,
 )
 from app.ui import apply_theme
 
@@ -25,8 +27,8 @@ if not user.can_manage_users:
     st.error("この画面はシステム管理者のみ利用できます。")
     st.stop()
 
-tab_contract, tab_billing, tab_policy, tab_insurance = st.tabs(
-    ["契約形式・計算パターン", "請求項目", "キャンセルポリシー", "法定福利費率"]
+tab_contract, tab_billing, tab_policy, tab_insurance, tab_segment_product = st.tabs(
+    ["契約形式・計算パターン", "請求項目", "キャンセルポリシー", "法定福利費率", "セグメント・商材"]
 )
 
 # ---------------------------------------------------------------
@@ -201,5 +203,55 @@ with tab_insurance:
         session.commit()
         st.success("保存しました。")
         st.rerun()
+
+# ---------------------------------------------------------------
+# セグメント・商材マスタ
+# ---------------------------------------------------------------
+with tab_segment_product:
+    col_seg, col_prod = st.columns(2)
+    with col_seg:
+        st.subheader("セグメントマスタ")
+        segments = session.execute(select(SegmentMaster)).scalars().all()
+        with st.form("new_segment_form", clear_on_submit=True):
+            name = st.text_input("新しいセグメント名")
+            if st.form_submit_button("追加", type="primary"):
+                existing = {s.name for s in segments}
+                if not name:
+                    st.error("名称を入力してください。")
+                elif name in existing:
+                    st.error(f"「{name}」は既に登録されています。")
+                else:
+                    session.add(SegmentMaster(name=name))
+                    session.commit()
+                    st.rerun()
+        for s in segments:
+            sc1, sc2 = st.columns([4, 1])
+            sc1.write(f"- {s.name}")
+            if sc2.button("削除", key=f"del_segment_{s.id}"):
+                session.delete(s)
+                session.commit()
+                st.rerun()
+    with col_prod:
+        st.subheader("商材マスタ")
+        products = session.execute(select(ProductMaster)).scalars().all()
+        with st.form("new_product_form", clear_on_submit=True):
+            name = st.text_input("新しい商材名")
+            if st.form_submit_button("追加", type="primary"):
+                existing = {p.name for p in products}
+                if not name:
+                    st.error("名称を入力してください。")
+                elif name in existing:
+                    st.error(f"「{name}」は既に登録されています。")
+                else:
+                    session.add(ProductMaster(name=name))
+                    session.commit()
+                    st.rerun()
+        for p in products:
+            pc1, pc2 = st.columns([4, 1])
+            pc1.write(f"- {p.name}")
+            if pc2.button("削除", key=f"del_product_{p.id}"):
+                session.delete(p)
+                session.commit()
+                st.rerun()
 
 session.close()

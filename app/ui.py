@@ -150,6 +150,18 @@ section[data-testid="stSidebar"] li a:hover {
 h1, h2, h3 {
     color: #362f66;
 }
+
+/* st.columns内でst.subheader(h3)が折り返すと、隣の列とカードの高さがずれて
+   見た目が崩れるため、見出しを一回り小さくして基本的に1行に収まるようにする。 */
+h3 {
+    font-size: 1.2rem;
+}
+
+/* 見出しにマウスを乗せると現れるコピーリンクアイコンは、テキストの一部が
+   欠けて見える原因になるため非表示にする。 */
+div[data-testid="stHeaderActionElements"] {
+    display: none !important;
+}
 </style>
 """
 

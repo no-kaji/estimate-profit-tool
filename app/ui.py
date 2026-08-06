@@ -120,61 +120,28 @@ nav[data-testid="stSidebarNav"] a[aria-current="page"] p {
     font-weight: 800 !important;
 }
 
-/* アイコン: ホバーで拡大(中心軸で拡大するため上下にずれない)。
-   Material Symbolsのアイコンがどの要素で描画されているか確認できないため、
-   考えられる候補(testid付きspan、svg、リンク直下の1つ目のspan)をすべて併記する。 */
-section[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
-div[data-testid="stSidebarNavItems"] a [data-testid^="stIcon"],
-nav[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
-section[data-testid="stSidebar"] li a [data-testid^="stIcon"],
-section[data-testid="stSidebarNav"] a svg,
-div[data-testid="stSidebarNavItems"] a svg,
-nav[data-testid="stSidebarNav"] a svg,
-section[data-testid="stSidebar"] li a svg,
-section[data-testid="stSidebarNav"] a span:first-child,
-div[data-testid="stSidebarNavItems"] a span:first-child,
-nav[data-testid="stSidebarNav"] a span:first-child,
-section[data-testid="stSidebar"] li a span:first-child {
-    display: inline-block;
+/* アイコンとテキストをそれぞれ別々に拡大すると、間隔が詰まって重なって見えるため、
+   個別に拡大するのではなくリンク全体を1つのグループとしてまとめて拡大する。
+   左端を基準に拡大することで、サイドバーの左端に食い込まず自然に大きくなる。 */
+section[data-testid="stSidebarNav"] a,
+div[data-testid="stSidebarNavItems"] a,
+nav[data-testid="stSidebarNav"] a,
+section[data-testid="stSidebar"] li a {
     transition: transform 0.25s ease;
-    transform-origin: center;
+    transform-origin: left center;
 }
-section[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
-div[data-testid="stSidebarNavItems"] a:hover [data-testid^="stIcon"],
-nav[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
-section[data-testid="stSidebar"] li a:hover [data-testid^="stIcon"],
-section[data-testid="stSidebarNav"] a:hover svg,
-div[data-testid="stSidebarNavItems"] a:hover svg,
-nav[data-testid="stSidebarNav"] a:hover svg,
-section[data-testid="stSidebar"] li a:hover svg,
-section[data-testid="stSidebarNav"] a:hover span:first-child,
-div[data-testid="stSidebarNavItems"] a:hover span:first-child,
-nav[data-testid="stSidebarNav"] a:hover span:first-child,
-section[data-testid="stSidebar"] li a:hover span:first-child {
-    transform: scale(1.2);
-}
-
-/* テキスト: ホバーで拡大(アイコンと同じくtransform-origin: centerで、上下にずれない) */
-section[data-testid="stSidebarNav"] a p,
-div[data-testid="stSidebarNavItems"] a p,
-nav[data-testid="stSidebarNav"] a p,
-section[data-testid="stSidebar"] li a span:last-child {
-    display: inline-block;
-    transition: transform 0.25s ease;
-    transform-origin: center;
-}
-section[data-testid="stSidebarNav"] a:hover p,
-div[data-testid="stSidebarNavItems"] a:hover p,
-nav[data-testid="stSidebarNav"] a:hover p,
-section[data-testid="stSidebar"] li a:hover span:last-child {
-    transform: scale(1.1);
+section[data-testid="stSidebarNav"] a:hover,
+div[data-testid="stSidebarNavItems"] a:hover,
+nav[data-testid="stSidebarNav"] a:hover,
+section[data-testid="stSidebar"] li a:hover {
+    transform: scale(1.12);
 }
 
 @media (prefers-reduced-motion: reduce) {
-    section[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
-    div[data-testid="stSidebarNavItems"] a [data-testid^="stIcon"],
-    nav[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
-    section[data-testid="stSidebar"] li a [data-testid^="stIcon"] {
+    section[data-testid="stSidebarNav"] a,
+    div[data-testid="stSidebarNavItems"] a,
+    nav[data-testid="stSidebarNav"] a,
+    section[data-testid="stSidebar"] li a {
         transition: none;
     }
 }

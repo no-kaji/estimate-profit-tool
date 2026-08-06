@@ -93,20 +93,28 @@ section[data-testid="stSidebar"] {
    Streamlitの内部DOM構造は確認できないため、複数のセレクタ候補を併記している。 */
 
 /* Streamlit標準の「現在のページ」を示す背景ボックスも含め、ナビ項目の背景ボックスは
-   常に非表示にする(文字の囲いは不要という指示のため)。 */
+   常に非表示にする(文字の囲いは不要という指示のため)。DOM構造を実機確認できないため、
+   a要素自身だけでなく親のli/div、内側のすべての子要素にもワイルドカードで適用し、
+   どの階層に背景が付いていても確実に消す。 */
+section[data-testid="stSidebarNav"] li,
+section[data-testid="stSidebarNav"] li *,
+div[data-testid="stSidebarNavItems"] li,
+div[data-testid="stSidebarNavItems"] li *,
+nav[data-testid="stSidebarNav"] li,
+nav[data-testid="stSidebarNav"] li *,
+section[data-testid="stSidebar"] li,
+section[data-testid="stSidebar"] li * {
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+}
 section[data-testid="stSidebarNav"] a,
 div[data-testid="stSidebarNavItems"] a,
 nav[data-testid="stSidebarNav"] a,
-section[data-testid="stSidebar"] li a,
-section[data-testid="stSidebarNav"] a[aria-current="page"],
-div[data-testid="stSidebarNavItems"] a[aria-current="page"],
-nav[data-testid="stSidebarNav"] a[aria-current="page"],
-section[data-testid="stSidebar"] li a[aria-current="page"] {
+section[data-testid="stSidebar"] li a {
     position: relative;
     isolation: isolate;
     overflow: visible !important;
-    background: transparent !important;
-    box-shadow: none !important;
 }
 section[data-testid="stSidebarNav"] a[aria-current="page"] p,
 div[data-testid="stSidebarNavItems"] a[aria-current="page"] p,
@@ -115,8 +123,9 @@ nav[data-testid="stSidebarNav"] a[aria-current="page"] p {
 }
 
 /* サイドバーの右の境界線そのものを、新しい飾りを足すのではなく各ナビ項目が
-   分担して描画する(既定状態では2pxの直線がつながって見える=これが境界線)。
-   ホバーした項目の分だけ、その境界線自体が右へ膨らむ形に変形する。
+   分担して描画する(既定状態では幅2px・角丸0の直線がつながって見える=これが境界線。
+   角丸を既定から付けると、複数項目が並んだときに縁がギザギザ/波打って見えてしまうため、
+   既定では必ず角丸0の直線にし、ホバー時のみ角丸を付けて膨らませる)。
    別要素を重ねて「線を足す」演出ではなく、境界線自体が動く実装。 */
 section[data-testid="stSidebar"] {
     position: relative;
@@ -132,7 +141,7 @@ section[data-testid="stSidebar"] li a::after {
     right: -2px;
     width: 2px;
     background: #6a5fd3;
-    border-radius: 2px;
+    border-radius: 0;
     transition: width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), border-radius 0.3s ease;
     pointer-events: none;
     z-index: 5;
@@ -148,20 +157,38 @@ section[data-testid="stSidebar"] li a:hover::after {
     border-bottom-right-radius: 0;
 }
 
-/* アイコン: ホバーで立体的な影を伴って浮き上がるシャドウ効果 */
+/* アイコン: ホバーで立体的な影を伴って浮き上がるシャドウ効果。
+   Material Symbolsのアイコンがどの要素で描画されているか確認できないため、
+   考えられる候補(testid付きspan、svg、リンク直下の1つ目のspan)をすべて併記する。 */
 section[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
 div[data-testid="stSidebarNavItems"] a [data-testid^="stIcon"],
 nav[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
-section[data-testid="stSidebar"] li a [data-testid^="stIcon"] {
+section[data-testid="stSidebar"] li a [data-testid^="stIcon"],
+section[data-testid="stSidebarNav"] a svg,
+div[data-testid="stSidebarNavItems"] a svg,
+nav[data-testid="stSidebarNav"] a svg,
+section[data-testid="stSidebar"] li a svg,
+section[data-testid="stSidebarNav"] a span:first-child,
+div[data-testid="stSidebarNavItems"] a span:first-child,
+nav[data-testid="stSidebarNav"] a span:first-child,
+section[data-testid="stSidebar"] li a span:first-child {
     display: inline-block;
     transition: transform 0.3s ease, filter 0.3s ease;
 }
 section[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
 div[data-testid="stSidebarNavItems"] a:hover [data-testid^="stIcon"],
 nav[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
-section[data-testid="stSidebar"] li a:hover [data-testid^="stIcon"] {
+section[data-testid="stSidebar"] li a:hover [data-testid^="stIcon"],
+section[data-testid="stSidebarNav"] a:hover svg,
+div[data-testid="stSidebarNavItems"] a:hover svg,
+nav[data-testid="stSidebarNav"] a:hover svg,
+section[data-testid="stSidebar"] li a:hover svg,
+section[data-testid="stSidebarNav"] a:hover span:first-child,
+div[data-testid="stSidebarNavItems"] a:hover span:first-child,
+nav[data-testid="stSidebarNav"] a:hover span:first-child,
+section[data-testid="stSidebar"] li a:hover span:first-child {
     transform: translateY(-4px);
-    filter: drop-shadow(0 6px 8px rgba(106, 95, 211, 0.45));
+    filter: drop-shadow(0 6px 8px rgba(106, 95, 211, 0.55));
 }
 
 /* テキスト: ホバーで上にUP+拡大(迫る) */

@@ -18,23 +18,25 @@ logout_button()
 st.title("収支管理")
 st.caption(
     "収支管理は「受注した」確定見積に対して実績を入力する仕組みです。"
-    "まず確定見積ごとに受注/失注を選び、受注したものだけを対象に週次実績を入力します。"
+    "まずマネージャーが承認した確定見積ごとに受注/失注を選び、受注したものだけを対象に週次実績を入力します。"
 )
 
 # ---------------------------------------------------------------
 # Step 1: 確定見積一覧 → 受注/失注を選択
+# 対象はマネージャーが承認済みの確定見積のみ(未承認・却下のものは収支管理の対象外)。
 # ---------------------------------------------------------------
 st.subheader("Step 1. 確定見積一覧(受注・失注の選択)")
 
 all_confirmed = session.execute(
     select(FinancialRecord).where(
         FinancialRecord.record_type == "確定見積",
+        FinancialRecord.approval_status == "承認済み",
         FinancialRecord.deleted_at.is_(None),
     )
 ).scalars().all()
 
 if not all_confirmed:
-    st.info("確定見積がまだありません。先に「見積入力」で確定見積を作成してください。")
+    st.info("承認済みの確定見積がまだありません。マネージャーの承認後、ここに表示されます。")
     st.stop()
 
 

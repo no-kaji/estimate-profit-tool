@@ -60,11 +60,17 @@ div[data-testid="stExpander"] summary {
     border-radius: 18px 18px 0 0 !important;
 }
 
-/* メトリクス(収支サマリ) */
+/* メトリクス(収支サマリ): 既定だと数値が大きすぎるため縮小する */
 div[data-testid="stMetric"] {
     background: rgba(122, 108, 224, 0.08);
     border-radius: 16px;
-    padding: 12px 16px;
+    padding: 10px 14px;
+}
+div[data-testid="stMetricValue"] {
+    font-size: 1.35rem !important;
+}
+div[data-testid="stMetricLabel"] {
+    font-size: 0.78rem !important;
 }
 
 /* タブ */
@@ -77,28 +83,77 @@ section[data-testid="stSidebar"] {
     border-radius: 0 20px 20px 0;
 }
 
-/* サイドバーのナビゲーション項目: ホバーするとアイコン部分が動く
-   (Streamlitのst.navigationが生成するDOM構造の詳細は取得できないため、
-   複数のセレクタ候補を併記して当たるようにしている。効果が見えない場合は
-   実際のDOM構造を確認して調整が必要)。 */
+/* サイドバーのナビゲーション項目: アイコン(線形Material Symbols)がホバーで揺れて動き、
+   下端に波打つ下線が現れる。Streamlitの内部DOM構造は確認できないため、
+   複数のセレクタ候補を併記して当たるようにしている。 */
 section[data-testid="stSidebarNav"] a,
 div[data-testid="stSidebarNavItems"] a,
 nav[data-testid="stSidebarNav"] a,
 section[data-testid="stSidebar"] li a {
+    position: relative;
     transition: background-color 0.15s ease;
+    overflow: visible !important;
 }
+section[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
+div[data-testid="stSidebarNavItems"] a [data-testid^="stIcon"],
+nav[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
+section[data-testid="stSidebar"] li a [data-testid^="stIcon"],
 section[data-testid="stSidebarNav"] a span:first-child,
 div[data-testid="stSidebarNavItems"] a span:first-child,
 nav[data-testid="stSidebarNav"] a span:first-child,
 section[data-testid="stSidebar"] li a span:first-child {
     display: inline-block;
-    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+section[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
+div[data-testid="stSidebarNavItems"] a:hover [data-testid^="stIcon"],
+nav[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
+section[data-testid="stSidebar"] li a:hover [data-testid^="stIcon"],
 section[data-testid="stSidebarNav"] a:hover span:first-child,
 div[data-testid="stSidebarNavItems"] a:hover span:first-child,
 nav[data-testid="stSidebarNav"] a:hover span:first-child,
 section[data-testid="stSidebar"] li a:hover span:first-child {
-    transform: scale(1.3) rotate(-10deg);
+    transform: scale(1.22) rotate(-8deg) translateY(-1px);
+}
+
+/* ホバー時に波打つ下線(SVGの波パターンを横スクロールさせて「波打つ」動きを表現) */
+section[data-testid="stSidebarNav"] a::after,
+div[data-testid="stSidebarNavItems"] a::after,
+nav[data-testid="stSidebarNav"] a::after,
+section[data-testid="stSidebar"] li a::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 2px;
+    height: 6px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='8' viewBox='0 0 24 8'%3E%3Cpath d='M0 4 Q6 0 12 4 T24 4' stroke='%236a5fd3' fill='none' stroke-width='1.6'/%3E%3C/svg%3E");
+    background-repeat: repeat-x;
+    background-size: 24px 8px;
+    opacity: 0;
+    transform: translateY(3px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+}
+section[data-testid="stSidebarNav"] a:hover::after,
+div[data-testid="stSidebarNavItems"] a:hover::after,
+nav[data-testid="stSidebarNav"] a:hover::after,
+section[data-testid="stSidebar"] li a:hover::after {
+    opacity: 0.8;
+    transform: translateY(0);
+    animation: nav-wave-scroll 0.9s linear infinite;
+}
+@keyframes nav-wave-scroll {
+    from { background-position-x: 0; }
+    to { background-position-x: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    section[data-testid="stSidebarNav"] a:hover::after,
+    div[data-testid="stSidebarNavItems"] a:hover::after,
+    nav[data-testid="stSidebarNav"] a:hover::after,
+    section[data-testid="stSidebar"] li a:hover::after {
+        animation: none;
+    }
 }
 
 /* 見出しのアクセントカラー */

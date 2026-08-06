@@ -84,12 +84,10 @@ section[data-testid="stSidebar"] {
 }
 
 /* サイドバーのナビゲーション項目
-   - アイコン(線形Material Symbols): ホバーで回転
-   - テキスト: ホバーで上にUP(迫るような元気な印象)
+   - アイコン・テキスト: ホバーで同じ中心軸(transform-origin: center)で拡大する
+     (位置がずれないよう、上下方向の移動は行わない)
    - 文字を囲む背景ボックスは一切表示しない(現在のページであっても囲まない)
-   - ナビゲーションバー右の枠線が、ホバーした項目の高さの位置だけ盛り上がって波打つ
-   参考: https://b-risk.jp/blog/2021/11/hover-reference/ (テキストが迫る)
-        https://kekenta-it-blog.com/icon-hover-animations-guide/ (アイコンの回転)
+   - 境界線のホバー演出は行わない
    Streamlitの内部DOM構造は確認できないため、複数のセレクタ候補を併記している。 */
 
 /* Streamlit標準の「現在のページ」を示す背景ボックスも含め、ナビ項目の背景ボックスは
@@ -122,42 +120,7 @@ nav[data-testid="stSidebarNav"] a[aria-current="page"] p {
     font-weight: 800 !important;
 }
 
-/* サイドバーの右の境界線そのものを、新しい飾りを足すのではなく各ナビ項目が
-   分担して描画する(既定状態では幅2px・角丸0の直線がつながって見える=これが境界線。
-   角丸を既定から付けると、複数項目が並んだときに縁がギザギザ/波打って見えてしまうため、
-   既定では必ず角丸0の直線にし、ホバー時のみ角丸を付けて膨らませる)。
-   別要素を重ねて「線を足す」演出ではなく、境界線自体が動く実装。 */
-section[data-testid="stSidebar"] {
-    position: relative;
-}
-section[data-testid="stSidebarNav"] a::after,
-div[data-testid="stSidebarNavItems"] a::after,
-nav[data-testid="stSidebarNav"] a::after,
-section[data-testid="stSidebar"] li a::after {
-    content: "";
-    position: absolute;
-    top: -10px;
-    bottom: -10px;
-    right: -2px;
-    width: 2px;
-    background: #6a5fd3;
-    border-radius: 0;
-    transition: width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), border-radius 0.3s ease;
-    pointer-events: none;
-    z-index: 5;
-}
-section[data-testid="stSidebarNav"] a:hover::after,
-div[data-testid="stSidebarNavItems"] a:hover::after,
-nav[data-testid="stSidebarNav"] a:hover::after,
-section[data-testid="stSidebar"] li a:hover::after {
-    width: 16px;
-    border-top-left-radius: 50% 40%;
-    border-bottom-left-radius: 50% 40%;
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-}
-
-/* アイコン: ホバーで立体的な影を伴って浮き上がるシャドウ効果。
+/* アイコン: ホバーで拡大(中心軸で拡大するため上下にずれない)。
    Material Symbolsのアイコンがどの要素で描画されているか確認できないため、
    考えられる候補(testid付きspan、svg、リンク直下の1つ目のspan)をすべて併記する。 */
 section[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
@@ -173,7 +136,8 @@ div[data-testid="stSidebarNavItems"] a span:first-child,
 nav[data-testid="stSidebarNav"] a span:first-child,
 section[data-testid="stSidebar"] li a span:first-child {
     display: inline-block;
-    transition: transform 0.3s ease, filter 0.3s ease;
+    transition: transform 0.25s ease;
+    transform-origin: center;
 }
 section[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
 div[data-testid="stSidebarNavItems"] a:hover [data-testid^="stIcon"],
@@ -187,31 +151,26 @@ section[data-testid="stSidebarNav"] a:hover span:first-child,
 div[data-testid="stSidebarNavItems"] a:hover span:first-child,
 nav[data-testid="stSidebarNav"] a:hover span:first-child,
 section[data-testid="stSidebar"] li a:hover span:first-child {
-    transform: translateY(-4px);
-    filter: drop-shadow(0 6px 8px rgba(106, 95, 211, 0.55));
+    transform: scale(1.2);
 }
 
-/* テキスト: ホバーで上にUP+拡大(迫る) */
+/* テキスト: ホバーで拡大(アイコンと同じくtransform-origin: centerで、上下にずれない) */
 section[data-testid="stSidebarNav"] a p,
 div[data-testid="stSidebarNavItems"] a p,
 nav[data-testid="stSidebarNav"] a p,
 section[data-testid="stSidebar"] li a span:last-child {
     display: inline-block;
-    transition: transform 0.2s ease;
-    transform-origin: left center;
+    transition: transform 0.25s ease;
+    transform-origin: center;
 }
 section[data-testid="stSidebarNav"] a:hover p,
 div[data-testid="stSidebarNavItems"] a:hover p,
 nav[data-testid="stSidebarNav"] a:hover p,
 section[data-testid="stSidebar"] li a:hover span:last-child {
-    transform: translateY(-3px) scale(1.1);
+    transform: scale(1.1);
 }
 
 @media (prefers-reduced-motion: reduce) {
-    section[data-testid="stSidebarNav"] a::after,
-    div[data-testid="stSidebarNavItems"] a::after,
-    nav[data-testid="stSidebarNav"] a::after,
-    section[data-testid="stSidebar"] li a::after,
     section[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
     div[data-testid="stSidebarNavItems"] a [data-testid^="stIcon"],
     nav[data-testid="stSidebarNav"] a [data-testid^="stIcon"],

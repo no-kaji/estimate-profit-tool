@@ -9,7 +9,6 @@ from app.models import FinancialRecord, Project
 from app.services.board_export import build_board_dataframe
 from app.ui import apply_theme
 
-st.set_page_config(page_title="経営ボード明細出力 | 収支ワークフローツール", page_icon="📊", layout="wide")
 init_db()
 session = get_session()
 user = require_login(session)

@@ -7,7 +7,6 @@ from app.models import CompanySeal
 from app.seal import generate_company_seal_svg, seal_img_tag
 from app.ui import apply_theme
 
-st.set_page_config(page_title="社判管理 | 収支ワークフローツール", page_icon="📊", layout="wide")
 init_db()
 session = get_session()
 user = require_login(session)

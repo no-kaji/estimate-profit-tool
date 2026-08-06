@@ -9,7 +9,6 @@ from app.db import get_session, init_db
 from app.models import FinancialRecord, Project, WeeklyActual
 from app.ui import apply_theme
 
-st.set_page_config(page_title="収支管理 | 収支ワークフローツール", page_icon="📊", layout="wide")
 init_db()
 session = get_session()
 user = require_login(session)

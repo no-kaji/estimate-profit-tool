@@ -39,12 +39,25 @@ div[data-baseweb="input"] {
     border-radius: 14px !important;
 }
 
-/* カード・コンテナ・エキスパンダー */
+/* カード・コンテナ・エキスパンダー
+   角丸が実際の枠線(details/summary等の内側要素)ではなく外側の透明なラッパーにしか
+   掛かっておらず、四隅が欠けて見える不具合があったため、実際に背景・枠線を描画している
+   要素(details, summary, 直下のdiv)にも明示的にborder-radius+overflow:hiddenを適用する。 */
 div[data-testid="stVerticalBlockBorderWrapper"],
 div[data-testid="stExpander"],
 div[data-testid="stForm"] {
     border-radius: 18px !important;
     overflow: hidden;
+}
+div[data-testid="stVerticalBlockBorderWrapper"] > div,
+div[data-testid="stExpander"] details,
+div[data-testid="stExpander"] > div,
+div[data-testid="stForm"] > div {
+    border-radius: 18px !important;
+    overflow: hidden;
+}
+div[data-testid="stExpander"] summary {
+    border-radius: 18px 18px 0 0 !important;
 }
 
 /* メトリクス(収支サマリ) */

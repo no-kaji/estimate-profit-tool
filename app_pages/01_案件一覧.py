@@ -8,7 +8,6 @@ from app.db import get_session, init_db
 from app.models import CostLine, FinancialRecord, LineItem, Project
 from app.ui import apply_theme
 
-st.set_page_config(page_title="案件一覧 | 収支ワークフローツール", page_icon="📊", layout="wide")
 init_db()
 session = get_session()
 user = require_login(session)
@@ -49,7 +48,7 @@ with log_errors(session, "01_案件一覧", user):
                 st.session_state["current_project_id"] = project.id
                 st.session_state["estimate_step"] = "contract_type"
                 st.session_state["show_new_project_form"] = False
-                st.switch_page("pages/02_見積入力.py")
+                st.switch_page("app_pages/02_見積入力.py")
 
     query = select(Project)
     query = query.where(Project.deleted_at.is_not(None)) if show_trash else query.where(Project.deleted_at.is_(None))
@@ -101,7 +100,7 @@ with log_errors(session, "01_案件一覧", user):
                     if btn_cols[0].button("開く", key=f"open_{project.id}"):
                         st.session_state["current_project_id"] = project.id
                         st.session_state["estimate_step"] = "contract_type"
-                        st.switch_page("pages/02_見積入力.py")
+                        st.switch_page("app_pages/02_見積入力.py")
                     if btn_cols[1].button("複製", key=f"dup_{project.id}"):
                         new_project = Project(
                             dept=project.dept,

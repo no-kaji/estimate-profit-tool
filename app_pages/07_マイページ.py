@@ -7,7 +7,6 @@ from app.models import ROLE_SYSTEM_ADMIN, FinancialRecord
 from app.seal import generate_personal_seal_svg, seal_img_tag
 from app.ui import apply_theme
 
-st.set_page_config(page_title="マイページ | 収支ワークフローツール", page_icon="📊", layout="wide")
 init_db()
 session = get_session()
 user = require_login(session)
@@ -68,6 +67,6 @@ else:
                     st.session_state["estimate_step"] = "detail"
                     st.session_state["selected_contract_type_id"] = rec.contract_type_id
                     st.session_state["editing_record_id"] = rec.id
-                    st.switch_page("pages/02_見積入力.py")
+                    st.switch_page("app_pages/02_見積入力.py")
 
 session.close()

@@ -30,7 +30,6 @@ from app.services.calc import (
 )
 from app.ui import apply_theme
 
-st.set_page_config(page_title="見積入力 | 収支ワークフローツール", page_icon="📊", layout="wide")
 init_db()
 session = get_session()
 user = require_login(session)

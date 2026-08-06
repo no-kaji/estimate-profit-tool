@@ -275,6 +275,21 @@ SharePoint連携も引き続き未着手。
   - マネージャー: ID `manager1` / パスワード `manager123`
   - ユーザー: ID `user1` / パスワード `user123`
 
+## 2026-08-06 データ永続化: PostgreSQL(VPS)+SSHトンネルへ切替
+
+- **既知の制約(Streamlit Cloudの一時ストレージ)を解消**: 依頼者が用意したXserver VPS
+  (AlmaLinux 10、IP: 162.43.51.134)上に、他アプリ(backs-system-portal等)と同居する形で
+  専用データベース`estimate_tool`・専用ロール`estimate_app`をPostgreSQLに新規作成した。
+- PostgreSQL自体は`127.0.0.1:5432`のみで待ち受け、外部には公開していない
+  (VPSの既存セキュリティ方針に合わせ、ポート開放やpg_hba.conf変更は行わない)。
+  代わりに、専用デプロイユーザー`estimate-tool-deploy`(sudo権限なし、鍵認証のみ)を
+  経由するSSHトンネル方式で接続する。
+- `app/db.py`: Streamlit Secretsに`[postgres]`/`[ssh_tunnel]`設定があればSSHトンネル経由で
+  PostgreSQLに接続し、無ければ従来通りSQLite(非永続、ローカル開発用)にフォールバックする
+  ように変更。`sshtunnel`・`paramiko`・`psycopg2-binary`を依存関係に追加。
+- これにより、Streamlit Cloudのアプリ再起動(Reboot app)を行ってもデータが消えなくなった
+  (PostgreSQL側にデータが永続化されるため)。
+
 ## 次のアクション
 
 - GitHubリポジトリを作成しコードをpush、Streamlit Community Cloudでデプロイして

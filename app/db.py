@@ -1,28 +1,82 @@
 from __future__ import annotations
 
+import io
 import os
 import tempfile
 
+import streamlit as st
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import Base
 
-# Streamlit Community Cloud上ではGitHubから取り込んだソースツリー(/mount/src/...)が
-# 書き込み禁止のため、そこにSQLiteファイルを作成できない。OS標準の一時ディレクトリ配下に
-# 保存する(=書き込みは確実に通るが、再デプロイ・再起動でデータは消える/永続化されない)。
-# 本番運用では永続ボリュームまたは外部DB(例: Postgres)への切り替えが必要(既知の制約)。
-DB_PATH = os.environ.get("ESTIMATE_TOOL_DB_PATH") or os.path.join(tempfile.gettempdir(), "estimate_tool_v3", "app.db")
+# 2026-08-06: 永続化のためPostgreSQL(VPS上、SSHトンネル経由)への接続に対応した。
+# Streamlit Secrets(st.secrets)に [postgres]/[ssh_tunnel] セクションが設定されていれば
+# そちらを使い、無ければ従来通りローカル開発用のSQLite(一時ディレクトリ、非永続)にフォールバックする。
 _engine = None
 _SessionLocal: sessionmaker[Session] | None = None
 _schema_checked = False
+_tunnel = None
+
+
+def _secrets_available() -> bool:
+    try:
+        return "postgres" in st.secrets and bool(st.secrets["postgres"].get("enabled", False))
+    except Exception:
+        return False
+
+
+def _start_ssh_tunnel():
+    """SSHトンネルを1プロセスにつき1回だけ張り、以降は使い回す。
+    PostgreSQL自体はVPS上でlocalhost(127.0.0.1)のみで待ち受けており、外部には公開していない
+    (セキュリティ方針に合わせ、ポート開放やpg_hba.confの変更は行わない)。
+    """
+    global _tunnel
+    if _tunnel is not None and _tunnel.is_active:
+        return _tunnel
+
+    from sshtunnel import SSHTunnelForwarder
+    import paramiko
+
+    ssh_cfg = st.secrets["ssh_tunnel"]
+    pg_cfg = st.secrets["postgres"]
+
+    pkey = paramiko.Ed25519Key.from_private_key(io.StringIO(ssh_cfg["ssh_private_key"]))
+
+    tunnel = SSHTunnelForwarder(
+        (ssh_cfg["ssh_host"], int(ssh_cfg.get("ssh_port", 22))),
+        ssh_username=ssh_cfg["ssh_user"],
+        ssh_pkey=pkey,
+        remote_bind_address=(pg_cfg.get("db_host", "127.0.0.1"), int(pg_cfg.get("db_port", 5432))),
+    )
+    tunnel.start()
+    _tunnel = tunnel
+    return tunnel
 
 
 def get_engine():
     global _engine
-    if _engine is None:
-        os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
-        _engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
+    if _engine is not None:
+        return _engine
+
+    if _secrets_available():
+        tunnel = _start_ssh_tunnel()
+        pg_cfg = st.secrets["postgres"]
+        url = (
+            f"postgresql+psycopg2://{pg_cfg['db_user']}:{pg_cfg['db_password']}"
+            f"@127.0.0.1:{tunnel.local_bind_port}/{pg_cfg['db_name']}"
+        )
+        _engine = create_engine(url, echo=False, pool_pre_ping=True)
+    else:
+        # フォールバック: ローカル開発用のSQLite。Streamlit Community Cloud上では
+        # ソースツリーが読み取り専用のため、OS標準の一時ディレクトリに保存する
+        # (=永続化されない。本番運用ではPostgreSQL接続の設定を推奨)。
+        db_path = os.environ.get("ESTIMATE_TOOL_DB_PATH") or os.path.join(
+            tempfile.gettempdir(), "estimate_tool_v3", "app.db"
+        )
+        os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+        _engine = create_engine(f"sqlite:///{db_path}", echo=False)
+
     return _engine
 
 
@@ -34,13 +88,8 @@ def get_session() -> Session:
 
 
 def _add_missing_columns(engine) -> None:
-    """モデルにあってDBに無い列を、既存データを消さずにALTER TABLEで追加する。
-
-    2026-08-06: 以前はスキーマ不一致を検知したらテーブルを丸ごと作り直していたが、
-    そのたびに登録済みユーザー等のデータが消えてしまい「登録情報を維持してほしい」との
-    指摘を受けた。列の追加はSQLiteのALTER TABLE ADD COLUMNで既存データを保持したまま行える
-    ため、この方式に変更する(列の削除・型変更には対応しない。使われなくなった列は
-    残ったままになるが実害はない)。
+    """モデルにあってDBに無い列を、既存データを消さずにALTER TABLEで追加する
+    (SQLite・PostgreSQLどちらでも動く)。列の削除・型変更には対応しない。
     """
     inspector = inspect(engine)
     existing_tables = set(inspector.get_table_names())

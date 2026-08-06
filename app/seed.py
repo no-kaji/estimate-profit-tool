@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 from app.auth import hash_password
 from app.db import get_session, init_db
 from app.models import (
+    ROLE_MANAGER,
     ROLE_SYSTEM_ADMIN,
+    ROLE_USER,
     BillingItemMaster,
     BranchMaster,
     CancellationPolicyMaster,
@@ -22,6 +24,15 @@ from app.models import (
 
 DEFAULT_ADMIN_USERNAME = "admin"
 DEFAULT_ADMIN_PASSWORD = "backstest"  # 初回ログイン後、必ず変更してください
+
+# 2026-08-06: Streamlit Cloudの「Reboot app」はコンテナを作り直すため、その都度
+# データ領域(/tmp)が消える(既知の制約。永続化するには外部DBへの切替が必要)。
+# 再起動のたびにテスト用アカウントを手動で作り直さずに済むよう、固定のサンプル
+# アカウントを常に自動投入する。
+SAMPLE_USERS = [
+    {"username": "manager1", "display_name": "サンプル マネージャー", "password": "manager123", "role": ROLE_MANAGER},
+    {"username": "user1", "display_name": "サンプル ユーザー", "password": "user123", "role": ROLE_USER},
+]
 
 PRICING_PATTERNS = [
     {"name": "人日×日数", "qty1_label": "日数", "qty2_label": None, "qty3_label": None},
@@ -126,10 +137,12 @@ def seed_if_empty(session: Session) -> None:
 
     session.flush()
 
-    if session.query(User).count() == 0:
-        hq = session.query(HeadquartersMaster).first()
-        branch = session.query(BranchMaster).first()
-        region = session.query(RegionMaster).first()
+    hq = session.query(HeadquartersMaster).first()
+    branch = session.query(BranchMaster).first()
+    region = session.query(RegionMaster).first()
+    existing_usernames = {u.username for u in session.query(User).all()}
+
+    if DEFAULT_ADMIN_USERNAME not in existing_usernames:
         session.add(
             User(
                 username=DEFAULT_ADMIN_USERNAME,
@@ -141,6 +154,21 @@ def seed_if_empty(session: Session) -> None:
                 region_id=region.id if region else None,
             )
         )
+
+    # サンプルのマネージャー/ユーザーは、承認フローをすぐ試せるよう同じ拠点に所属させる。
+    for su in SAMPLE_USERS:
+        if su["username"] not in existing_usernames:
+            session.add(
+                User(
+                    username=su["username"],
+                    display_name=su["display_name"],
+                    password_hash=hash_password(su["password"]),
+                    role=su["role"],
+                    headquarters_id=hq.id if hq else None,
+                    branch_id=branch.id if branch else None,
+                    region_id=region.id if region else None,
+                )
+            )
 
     session.commit()
 

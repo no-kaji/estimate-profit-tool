@@ -114,53 +114,54 @@ nav[data-testid="stSidebarNav"] a[aria-current="page"] p {
     font-weight: 800 !important;
 }
 
-/* サイドバー背景(ナビゲーション場)の右の枠線を、上から下まで連続した波形にする。
-   個別の項目ではなく、サイドバー全体の右端の線として実装し、いずれかの項目に
-   ホバーしている間、波が流れるようにアニメーションする。 */
+/* サイドバー(ナビゲーション場)の右の枠線は常時は細い直線。
+   ホバーした項目の高さの位置だけ、その枠線自体が右に膨れ上がる
+   (枠線と地続きの丸みとして生えさせることで、独立した図形ではなく
+   「枠が動いている」ように見せる)。全体が揺れる演出ではなく、
+   あくまでホバーした一か所だけが膨らむ。 */
 section[data-testid="stSidebar"] {
     position: relative;
+    border-right: 2px solid rgba(106, 95, 211, 0.3);
 }
-section[data-testid="stSidebar"]::after {
+section[data-testid="stSidebarNav"] a::after,
+div[data-testid="stSidebarNavItems"] a::after,
+nav[data-testid="stSidebarNav"] a::after,
+section[data-testid="stSidebar"] li a::after {
     content: "";
     position: absolute;
-    top: 0;
-    right: -3px;
-    bottom: 0;
-    width: 7px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='28' viewBox='0 0 7 28'%3E%3Cpath d='M3.5,0 C6.5,3.5 0.5,10.5 3.5,14 C6.5,17.5 0.5,24.5 3.5,28' stroke='%236a5fd3' fill='none' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
-    background-repeat: repeat-y;
-    background-size: 7px 28px;
-    opacity: 0.35;
-    transition: opacity 0.3s ease;
+    top: 50%;
+    right: -2px;
+    width: 20px;
+    height: 60%;
+    background: #6a5fd3;
+    border-radius: 50%;
+    transform: translateY(-50%) scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     pointer-events: none;
     z-index: 5;
 }
-section[data-testid="stSidebar"]:hover::after {
-    opacity: 1;
-    animation: sidebar-border-wave-flow 1.6s linear infinite;
-}
-@keyframes sidebar-border-wave-flow {
-    from { background-position-y: 0; }
-    to { background-position-y: 28px; }
+section[data-testid="stSidebarNav"] a:hover::after,
+div[data-testid="stSidebarNavItems"] a:hover::after,
+nav[data-testid="stSidebarNav"] a:hover::after,
+section[data-testid="stSidebar"] li a:hover::after {
+    transform: translateY(-50%) scaleX(1);
 }
 
-/* アイコン: ホバーしている間、回転し続ける(参考CodePenのfa-syncのような継続回転) */
+/* アイコン: ホバーで立体的な影を伴って浮き上がるシャドウ効果 */
 section[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
 div[data-testid="stSidebarNavItems"] a [data-testid^="stIcon"],
 nav[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
 section[data-testid="stSidebar"] li a [data-testid^="stIcon"] {
     display: inline-block;
-    transform-origin: center;
+    transition: transform 0.3s ease, filter 0.3s ease;
 }
 section[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
 div[data-testid="stSidebarNavItems"] a:hover [data-testid^="stIcon"],
 nav[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
 section[data-testid="stSidebar"] li a:hover [data-testid^="stIcon"] {
-    animation: nav-icon-spin 1s linear infinite;
-}
-@keyframes nav-icon-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    transform: translateY(-4px);
+    filter: drop-shadow(0 6px 8px rgba(106, 95, 211, 0.45));
 }
 
 /* テキスト: ホバーで上にUP+拡大(迫る) */
@@ -180,12 +181,15 @@ section[data-testid="stSidebar"] li a:hover span:last-child {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    section[data-testid="stSidebar"]::after,
-    section[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
-    div[data-testid="stSidebarNavItems"] a:hover [data-testid^="stIcon"],
-    nav[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
-    section[data-testid="stSidebar"] li a:hover [data-testid^="stIcon"] {
-        animation: none;
+    section[data-testid="stSidebarNav"] a::after,
+    div[data-testid="stSidebarNavItems"] a::after,
+    nav[data-testid="stSidebarNav"] a::after,
+    section[data-testid="stSidebar"] li a::after,
+    section[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
+    div[data-testid="stSidebarNavItems"] a [data-testid^="stIcon"],
+    nav[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
+    section[data-testid="stSidebar"] li a [data-testid^="stIcon"] {
+        transition: none;
     }
 }
 

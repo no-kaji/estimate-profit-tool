@@ -114,52 +114,53 @@ nav[data-testid="stSidebarNav"] a[aria-current="page"] p {
     font-weight: 800 !important;
 }
 
-/* サイドバー全体の右端に枠線を用意し、ナビ項目の行の外側(overflow visible)に
-   はみ出す形でバンプ(こぶ)を配置する。ホバー時のみそのバンプが右に膨らみ、
-   「その項目の高さの位置だけ枠線が波打つ」ように見せる。 */
+/* サイドバー背景(ナビゲーション場)の右の枠線を、上から下まで連続した波形にする。
+   個別の項目ではなく、サイドバー全体の右端の線として実装し、いずれかの項目に
+   ホバーしている間、波が流れるようにアニメーションする。 */
 section[data-testid="stSidebar"] {
-    border-right: 2px solid rgba(106, 95, 211, 0.18);
+    position: relative;
 }
-section[data-testid="stSidebarNav"] a::after,
-div[data-testid="stSidebarNavItems"] a::after,
-nav[data-testid="stSidebarNav"] a::after,
-section[data-testid="stSidebar"] li a::after {
+section[data-testid="stSidebar"]::after {
     content: "";
     position: absolute;
-    top: 50%;
-    right: -22px;
-    width: 26px;
-    height: 70%;
-    background: #6a5fd3;
-    border-radius: 50%;
-    transform: translateY(-50%) scaleX(0);
-    transform-origin: left center;
-    opacity: 0;
-    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+    top: 0;
+    right: -3px;
+    bottom: 0;
+    width: 7px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='28' viewBox='0 0 7 28'%3E%3Cpath d='M3.5,0 C6.5,3.5 0.5,10.5 3.5,14 C6.5,17.5 0.5,24.5 3.5,28' stroke='%236a5fd3' fill='none' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: repeat-y;
+    background-size: 7px 28px;
+    opacity: 0.35;
+    transition: opacity 0.3s ease;
     pointer-events: none;
     z-index: 5;
 }
-section[data-testid="stSidebarNav"] a:hover::after,
-div[data-testid="stSidebarNavItems"] a:hover::after,
-nav[data-testid="stSidebarNav"] a:hover::after,
-section[data-testid="stSidebar"] li a:hover::after {
-    transform: translateY(-50%) scaleX(1);
+section[data-testid="stSidebar"]:hover::after {
     opacity: 1;
+    animation: sidebar-border-wave-flow 1.6s linear infinite;
+}
+@keyframes sidebar-border-wave-flow {
+    from { background-position-y: 0; }
+    to { background-position-y: 28px; }
 }
 
-/* アイコン: ホバーで回転 */
+/* アイコン: ホバーしている間、回転し続ける(参考CodePenのfa-syncのような継続回転) */
 section[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
 div[data-testid="stSidebarNavItems"] a [data-testid^="stIcon"],
 nav[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
 section[data-testid="stSidebar"] li a [data-testid^="stIcon"] {
     display: inline-block;
-    transition: transform 0.45s ease;
+    transform-origin: center;
 }
 section[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
 div[data-testid="stSidebarNavItems"] a:hover [data-testid^="stIcon"],
 nav[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
 section[data-testid="stSidebar"] li a:hover [data-testid^="stIcon"] {
-    transform: rotate(360deg);
+    animation: nav-icon-spin 1s linear infinite;
+}
+@keyframes nav-icon-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 /* テキスト: ホバーで上にUP+拡大(迫る) */
@@ -179,15 +180,12 @@ section[data-testid="stSidebar"] li a:hover span:last-child {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    section[data-testid="stSidebarNav"] a::after,
-    div[data-testid="stSidebarNavItems"] a::after,
-    nav[data-testid="stSidebarNav"] a::after,
-    section[data-testid="stSidebar"] li a::after,
-    section[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
-    div[data-testid="stSidebarNavItems"] a [data-testid^="stIcon"],
-    nav[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
-    section[data-testid="stSidebar"] li a [data-testid^="stIcon"] {
-        transition: none;
+    section[data-testid="stSidebar"]::after,
+    section[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
+    div[data-testid="stSidebarNavItems"] a:hover [data-testid^="stIcon"],
+    nav[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
+    section[data-testid="stSidebar"] li a:hover [data-testid^="stIcon"] {
+        animation: none;
     }
 }
 

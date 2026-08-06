@@ -122,6 +122,33 @@ InsuranceRateMaster / BillingItemMaster / CancellationPolicyMaster。
   2回目でようやく反映される不具合があった。書き戻しをやめ、初回読み込み時の値のみを
   `st.session_state`に保持する方式に修正。
 
+## 2026-08-06 追加実装: 承認フロー・印鑑・週次実績・経営ボード明細出力
+
+- `app/seal.py`: 個人印鑑・社判をSVG文字列として生成(CJKフォント同梱不要な方式、
+  ADR-6参照)。
+- `models.py`: `User.seal_svg`、`CompanySeal`、`Notification`、`WeeklyActual`を追加。
+  `FinancialRecord`に承認フロー用フィールド(`approval_status`等)を追加。
+  `record_type`から「実績」を廃止(概算見積/確定見積の2種類に変更)。
+- `pages/02_見積入力.py`: レコード種別から「実績」を削除。確定見積で「完了(承認フローに申請)」
+  ボタン→`st.dialog`によるポップアップ確認→申請、を実装。
+- `pages/07_マイページ.py`(新規): 個人印鑑の生成。
+- `pages/08_社判管理.py`(新規、マネージャー/システム管理者): 社判の登録。
+- `pages/09_承認.py`(新規、マネージャー/システム管理者): 承認申請の一覧・承認・却下、
+  承認/却下時に申請者へ通知(`Notification`)を作成。
+- `Home.py`: 未読通知の表示。
+- `pages/10_収支管理.py`(新規): 確定見積を選択し、週次で実績値(売上高/売上原価/
+  販管費/常勤数/ポジ数)を入力。
+- `app/services/board_export.py`・`pages/11_経営ボード明細出力.py`(新規): 確定見積を
+  対象期間の各月に展開(区分=予算)、週次実績を月次合算(区分=実績)し、経営ボード明細と
+  同一列構成でExcel/CSV出力。
+
+**未実装(次回以降)**:
+- 見積書・収支計算書のPDF生成そのもの(ADR-3改訂: reportlabで実装予定、印鑑合成含む)。
+  承認フロー・印鑑データの土台は用意したが、PDFへの実際の描画・印影合成はまだない。
+- SharePoint/Power BIへの自動反映(ADR-7、Azure ADアプリ登録が必要なため要人間判断)。
+- 承認フローの申請者への「本人が能動的に確認しに行かなくても気づける」プッシュ通知
+  (現状はHome画面訪問時のバナー表示のみ)。
+
 ## 次のアクション
 
 - GitHubリポジトリを作成しコードをpush、Streamlit Community Cloudでデプロイして

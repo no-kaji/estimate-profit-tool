@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from app.auth import logout_button, require_login
 from app.db import get_session, init_db
+from app.seal import seal_img_tag
 from app.models import (
     BillingItemMaster,
     CancellationPolicyMaster,
@@ -63,12 +64,12 @@ existing_records = session.execute(
     select(FinancialRecord).where(FinancialRecord.project_id == project.id)
 ).scalars().all()
 
-mode = st.radio("操作", ["新規に見積/実績を作成", "既存レコードを編集"], horizontal=True)
+mode = st.radio("操作", ["新規に見積を作成", "既存レコードを編集"], horizontal=True)
 
 editing_record: FinancialRecord | None = None
 if mode == "既存レコードを編集":
     if not existing_records:
-        st.info("この案件にはまだレコードがありません。「新規に見積/実績を作成」を選んでください。")
+        st.info("この案件にはまだレコードがありません。「新規に見積を作成」を選んでください。")
         st.stop()
     rec_labels = {r.id: f"{r.record_type} / {r.period_start or '期間未定'}〜{r.period_end or ''}" for r in existing_records}
     rec_id = st.selectbox("編集するレコード", options=list(rec_labels.keys()), format_func=lambda i: rec_labels[i])
@@ -78,7 +79,7 @@ if mode == "既存レコードを編集":
     st.session_state["editing_record_id"] = editing_record.id
 else:
     st.session_state.setdefault("estimate_step", "contract_type")
-    if st.session_state.get("editing_record_id") is not None and mode == "新規に見積/実績を作成":
+    if st.session_state.get("editing_record_id") is not None and mode == "新規に見積を作成":
         st.session_state["editing_record_id"] = None
         st.session_state["estimate_step"] = "contract_type"
 
@@ -120,25 +121,63 @@ if c2.button("契約形式を変更"):
 
 record_type = st.radio(
     "レコード種別",
-    ["概算見積", "確定見積", "実績"],
+    ["概算見積", "確定見積"],
     horizontal=True,
-    index=["概算見積", "確定見積", "実績"].index(editing_record.record_type) if editing_record else 0,
+    index=["概算見積", "確定見積"].index(editing_record.record_type) if editing_record else 0,
 )
+st.caption("実績は「収支管理」メニューで、確定見積を選んで週次入力します。")
 
 period_start = period_end = None
 if record_type == "確定見積":
     pc1, pc2 = st.columns(2)
     period_start = pc1.date_input("開始月(1日を選択)", value=editing_record.period_start if editing_record else dt.date.today().replace(day=1))
     period_end = pc2.date_input("終了月(1日を選択)", value=editing_record.period_end if editing_record else dt.date.today().replace(day=1))
-elif record_type == "実績":
-    target_month = st.date_input("対象年月(1日を選択)", value=editing_record.period_start if editing_record else dt.date.today().replace(day=1))
-    period_start = period_end = target_month
 else:
     st.caption("概算見積のため期間は未定でも登録できます。")
 
 if record_type == "概算見積" and editing_record is not None:
     if st.button("この内容で確定見積を作成 →"):
         st.session_state["_copy_to_confirmed"] = editing_record.id
+
+# ---------------------------------------------------------------
+# 承認申請(確定見積の見積書発行フロー): 本人の個人印鑑 -> マネージャー承認で社判配置
+# ---------------------------------------------------------------
+if record_type == "確定見積" and editing_record is not None:
+    status = editing_record.approval_status
+    badge_map = {"下書き": "⚪ 下書き", "申請中": "🟡 承認申請中", "承認済み": "🟢 承認済み(社判配置済み)", "却下": "🔴 却下"}
+    st.info(f"承認ステータス: {badge_map.get(status, status)}")
+
+    if status in ("下書き", "却下") and user.seal_svg:
+
+        @st.dialog("承認フロー申請")
+        def _confirm_submit_dialog(record_id: int):
+            st.write("この内容で承認フローに申請しますか?申請するとマネージャーの承認待ちになります。")
+            st.markdown(seal_img_tag(user.seal_svg, size=70), unsafe_allow_html=True)
+            st.caption("↑あなたの個人印鑑がこの見積書に配置されます。")
+            dc1, dc2 = st.columns(2)
+            if dc1.button("申請する", type="primary", use_container_width=True):
+                rec = session.get(FinancialRecord, record_id)
+                rec.approval_status = "申請中"
+                rec.requested_by_id = user.id
+                rec.requested_at = dt.datetime.utcnow()
+                rec.reject_reason = None
+                session.commit()
+                st.session_state["_approval_submitted"] = True
+                st.rerun()
+            if dc2.button("キャンセル", use_container_width=True):
+                st.rerun()
+
+        if st.button("完了(承認フローに申請)", type="primary"):
+            _confirm_submit_dialog(editing_record.id)
+    elif status in ("下書き", "却下") and not user.seal_svg:
+        st.warning("承認フローに申請する前に、マイページで個人印鑑を生成してください。")
+    elif status == "申請中":
+        st.caption(f"申請日時: {editing_record.requested_at} / 承認者からの回答をお待ちください。")
+    elif status == "承認済み":
+        st.caption(f"承認日時: {editing_record.approved_at} / 承認者: {editing_record.approved_by.display_name if editing_record.approved_by else ''}")
+
+    if st.session_state.pop("_approval_submitted", False):
+        st.success("承認フローに申請しました。マネージャーの承認をお待ちください。")
 
 # ---------------------------------------------------------------
 # 明細行(人件費)

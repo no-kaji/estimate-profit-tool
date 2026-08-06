@@ -345,18 +345,61 @@ erDiagram
 
 PROJECT・FINANCIAL_RECORDには`deleted_at: datetime | None`を追加する(上記の論理削除)。
 
-## ADR-3: 出力方式(PDF/Excel/経営ボード明細レコード)
+## ADR-6: 印鑑・承認フロー・週次実績(2026-08-06追加)
 
-- **見積書PDF/Excel**: openpyxlで社内指定の見積書レイアウト(Excelテンプレート)に
-  値を流し込み、Excel出力はそのまま提供、PDF出力はExcel→PDF変換
-  (LibreOffice headlessまたはWindows環境であればExcel COM経由)で生成する。
-  社内配布用Windows環境が前提のため、まずCOM経由変換を採用し、失敗時のフォールバックとして
-  LibreOffice変換を検討する。
-- **収支計算書PDF/Excel**: 同様にopenpyxlでテンプレートへ値を流し込む。
-- **経営ボード明細レコード出力**: 対象期間・対象案件を選択し、経営ボード明細と同一列構成の
-  Excel(またはCSV)を書き出す機能。既存の経営ボード明細.xlsxへの追記/置換は、
-  ファイル破損リスクを避けるため「新規ファイル書き出し→人間が既存ファイルにマージ」を
-  初期運用とする(自動上書きはWon't扱い。Should以降で自動マージを検討)。
+- **背景**: 確定見積の見積書発行に、本人の個人印鑑→マネージャー承認→社判配置という
+  承認フローを設けたい。また実績入力は、見積の明細行編集とは別に「収支管理」メニューで
+  確定見積を選び、週単位で入力したい。
+- **印鑑画像**: PIL等でラスタ画像を生成する方式は、日本語を描画するためのCJKフォント
+  ファイルをリポジトリに同梱する必要があり(Streamlit Cloud上のLinux環境に日本語フォントが
+  標準で入っている保証がない)、対応コストが高い。代わりに**SVG文字列**を生成し
+  (`app/seal.py`)、ブラウザ側のフォントでテキストを描画させる方式にした
+  (画面表示は`st.markdown(..., unsafe_allow_html=True)`で`<img>`タグとして埋め込む)。
+  `User.seal_svg`(個人印鑑)・`CompanySeal.svg`(社判、最新1件を有効とする)に保存する。
+- **承認フロー**: `FINANCIAL_RECORD`に`approval_status`(下書き/申請中/承認済み/却下)・
+  `requested_by_id`・`requested_at`・`approved_by_id`・`approved_at`・`reject_reason`を追加。
+  対象は確定見積のみ。本人が個人印鑑を生成済みであることを申請の条件とする
+  (`pages/02_見積入力.py`、`st.dialog`によるポップアップ確認)。マネージャー・
+  システム管理者向けの`pages/09_承認.py`で申請一覧を確認し、承認/却下できる。承認時は
+  `Notification`を発行し、申請者がHome画面で確認できるようにする。社判自体は承認時に
+  DBへ書き込むのではなく、PDF生成時(未実装、ADR-3参照)に承認済みレコードへ社判画像を
+  合成する方針とする。
+- **週次実績**: `WeeklyActual`(financial_record_id, week_start, sales, cost, sga_cost,
+  headcount_regular, headcount_position, entered_by_id)を新設。確定見積(FINANCIAL_RECORD)
+  に対して複数の週次実績を持てる。経営ボード明細出力時は、週の月曜日が属する月へ合算する
+  (月をまたぐ週の厳密な日割りは行わない、簡易実装)。これに伴い、`FINANCIAL_RECORD.record_type`
+  から「実績」を廃止し「概算見積」「確定見積」の2種類のみとした(ADR-4の3段階モデルを修正)。
+
+## ADR-7(Escalation): SharePoint/Power BI連携(2026-08-06追加、未実施・要人間判断)
+
+- **背景**: Power BIはSharePoint/OneDrive上の経営ボード明細.xlsxを直接参照している。
+  ツールからそこへ自動反映するには、Microsoft Graph API(Excel API)でSharePoint上の
+  ファイルを直接更新する実装が必要。これには**Azure ADアプリ登録・クライアントシークレット
+  等の新規クレデンシャル発行**が要る(Solution Architectのエスカレーション対象)。
+- **暫定対応(実装済み)**: `pages/11_経営ボード明細出力.py`でExcel/CSVを出力し、
+  人間が既存のSharePointファイルへ手動でコピー&ペーストする運用とする。
+- **今後の選択肢**(人間の判断が必要、いずれも本セッションでは着手しない):
+  1. Microsoft Graph APIでの自動書き込み(IT部門でのAzure ADアプリ登録が前提)
+  2. 既存のPower Automateフロー(README記載の既存基盤)を経由した半自動反映
+     (例: ツールが出力したファイルを所定のSharePointフォルダに置くと、Power Automateが
+     経営ボード明細.xlsxへの反映を行う)
+  3. 当面は暫定対応(手動コピー)を継続する
+
+## ADR-3: 出力方式(PDF/Excel/経営ボード明細レコード)(2026-08-06改訂)
+
+- **見積書PDF/Excel**: 実際のデプロイ先がStreamlit Community Cloud(Linuxコンテナ、
+  Excel/LibreOfficeが存在しない)であることが判明したため、当初想定していた
+  「openpyxlでテンプレートに流し込み→Excel COM/LibreOfficeでPDF変換」は採用できない
+  (既知の制約の是正)。PDFは`reportlab`(純Pythonライブラリ、外部バイナリ不要)で
+  直接描画して生成する方式に変更する。Excel出力は引き続きopenpyxlで問題なく生成できる。
+  承認済みの確定見積は、生成するPDFに個人印鑑・社判の画像を合成する(ADR-6参照)。
+  **2026-08-06時点でPDF生成そのものは未実装**(承認フロー・印鑑データの土台のみ実装済み、
+  50_implementation.md参照)。
+- **収支計算書PDF/Excel**: 同様にreportlab/openpyxlで生成する(未実装)。
+- **経営ボード明細レコード出力**: `pages/11_経営ボード明細出力.py`で実装済み。対象案件を
+  選択し、確定見積(区分=予算、期間内の各月に展開)と週次実績(区分=実績、月次に合算)を
+  経営ボード明細と同一列構成でExcel/CSV書き出しできる。SharePoint上の既存ファイルへの
+  自動反映はADR-7(Escalation)参照、当面は人間による手動マージとする。
 
 ## ADR-4: 「年月」の扱い、および見積の3段階(概算/確定/実績)モデル(2026-08-04 人間確認により確定)
 

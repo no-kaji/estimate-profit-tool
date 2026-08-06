@@ -132,6 +132,7 @@ class User(Base):
 
     headquarters: Mapped["HeadquartersMaster | None"] = relationship()
     branch: Mapped["BranchMaster | None"] = relationship()
+    seal_svg: Mapped[str | None] = mapped_column(default=None)  # マイページで生成する個人印鑑(SVG文字列)
 
     @property
     def can_delete(self) -> bool:
@@ -149,6 +150,25 @@ class User(Base):
     def can_manage_users(self) -> bool:
         return self.role == ROLE_SYSTEM_ADMIN
 
+    @property
+    def can_manage_company_seal(self) -> bool:
+        return self.role in (ROLE_SYSTEM_ADMIN, ROLE_MANAGER)
+
+    @property
+    def can_approve(self) -> bool:
+        return self.role in (ROLE_SYSTEM_ADMIN, ROLE_MANAGER)
+
+
+class CompanySeal(Base):
+    """社判(会社印)。マネージャー/システム管理者が登録する(全社で1つを最新として使う)。"""
+
+    __tablename__ = "company_seals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    svg: Mapped[str] = mapped_column(default="")
+    registered_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
+    registered_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)
+
 
 class ErrorLog(Base):
     __tablename__ = "error_logs"
@@ -160,6 +180,16 @@ class ErrorLog(Base):
     message: Mapped[str] = mapped_column(default="")
 
     user: Mapped["User | None"] = relationship()
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    message: Mapped[str] = mapped_column(default="")
+    created_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)
+    read_at: Mapped[dt.datetime | None] = mapped_column(default=None)
 
 
 class Project(Base):
@@ -183,7 +213,7 @@ class FinancialRecord(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
-    record_type: Mapped[str]  # "概算見積" / "確定見積" / "実績"
+    record_type: Mapped[str]  # "概算見積" / "確定見積"(2026-08-06: 「実績」は廃止し、収支管理の週次実績に移行)
     contract_type_id: Mapped[int | None] = mapped_column(ForeignKey("contract_types.id"), default=None)
     copied_from_id: Mapped[int | None] = mapped_column(ForeignKey("financial_records.id"), default=None)
     period_start: Mapped[dt.date | None] = mapped_column(default=None)
@@ -197,6 +227,14 @@ class FinancialRecord(Base):
     unit_name: Mapped[str] = mapped_column(default="")
     headquarters_name: Mapped[str] = mapped_column(default="")
     deleted_at: Mapped[dt.datetime | None] = mapped_column(default=None)
+
+    # 承認フロー(確定見積の見積書発行用): 下書き -> 申請中 -> 承認済み/却下
+    approval_status: Mapped[str] = mapped_column(default="下書き")
+    requested_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
+    requested_at: Mapped[dt.datetime | None] = mapped_column(default=None)
+    approved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
+    approved_at: Mapped[dt.datetime | None] = mapped_column(default=None)
+    reject_reason: Mapped[str | None] = mapped_column(default=None)
     created_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow)
 
@@ -204,6 +242,9 @@ class FinancialRecord(Base):
     contract_type: Mapped["ContractType | None"] = relationship()
     line_items: Mapped[list["LineItem"]] = relationship(back_populates="financial_record", cascade="all, delete-orphan")
     cost_lines: Mapped[list["CostLine"]] = relationship(back_populates="financial_record", cascade="all, delete-orphan")
+    requested_by: Mapped["User | None"] = relationship(foreign_keys=[requested_by_id])
+    approved_by: Mapped["User | None"] = relationship(foreign_keys=[approved_by_id])
+    weekly_actuals: Mapped[list["WeeklyActual"]] = relationship(back_populates="financial_record", cascade="all, delete-orphan")
 
 
 class LineItem(Base):
@@ -267,3 +308,30 @@ class CostLine(Base):
 
     financial_record: Mapped["FinancialRecord"] = relationship(back_populates="cost_lines")
     pricing_pattern: Mapped["PricingPattern | None"] = relationship()
+
+
+class WeeklyActual(Base):
+    """収支管理メニューで入力する週次実績。対象の確定見積(FinancialRecord)に紐づく。
+
+    経営ボード明細への出力時は、対象月に含まれる週の実績を合算して月次に丸める。
+    """
+
+    __tablename__ = "weekly_actuals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    financial_record_id: Mapped[int] = mapped_column(ForeignKey("financial_records.id"))
+    week_start: Mapped[dt.date] = mapped_column()  # その週の月曜日
+    sales: Mapped[float] = mapped_column(default=0.0)
+    cost: Mapped[float] = mapped_column(default=0.0)
+    sga_cost: Mapped[float] = mapped_column(default=0.0)
+    headcount_regular: Mapped[int] = mapped_column(default=0)  # 常勤数
+    headcount_position: Mapped[int] = mapped_column(default=0)  # ポジ数
+    entered_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
+    entered_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow)
+
+    financial_record: Mapped["FinancialRecord"] = relationship(back_populates="weekly_actuals")
+    entered_by: Mapped["User | None"] = relationship()
+
+    @property
+    def profit(self) -> float:
+        return self.sales - self.cost

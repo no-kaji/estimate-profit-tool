@@ -71,7 +71,7 @@ with log_errors(session, "01_案件一覧", user):
             ).scalars().all()
             draft_n = sum(1 for r in records if r.record_type == "概算見積")
             confirmed_n = sum(1 for r in records if r.record_type == "確定見積")
-            actual_n = sum(1 for r in records if r.record_type == "実績")
+            approved_n = sum(1 for r in records if r.approval_status == "承認済み")
 
             with st.container(border=True):
                 c1, c2, c3 = st.columns([3, 2, 3])
@@ -84,8 +84,8 @@ with log_errors(session, "01_案件一覧", user):
                         badges.append(f"概算 ×{draft_n}")
                     if confirmed_n:
                         badges.append(f"確定 ×{confirmed_n}")
-                    if actual_n:
-                        badges.append(f"実績 ×{actual_n}")
+                    if approved_n:
+                        badges.append(f"承認済み ×{approved_n}")
                     st.write(" / ".join(badges) if badges else "レコードなし")
                 with c3:
                     if show_trash:
@@ -177,7 +177,7 @@ with log_errors(session, "01_案件一覧", user):
                                     )
                                 )
                         session.commit()
-                        st.success("案件情報と配下の見積・実績明細をまるごと複製しました。")
+                        st.success("案件情報と配下の見積明細をまるごと複製しました(週次実績は複製されません)。")
                         st.rerun()
                     if user.can_delete:
                         if btn_cols[2].button("削除", key=f"del_{project.id}"):

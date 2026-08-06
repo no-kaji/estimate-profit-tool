@@ -3,7 +3,7 @@ from sqlalchemy import select
 
 from app.auth import logout_button, require_login
 from app.db import get_session, init_db
-from app.models import FinancialRecord
+from app.models import ROLE_SYSTEM_ADMIN, FinancialRecord
 from app.seal import generate_personal_seal_svg, seal_img_tag
 from app.ui import apply_theme
 
@@ -13,6 +13,11 @@ session = get_session()
 user = require_login(session)
 apply_theme()
 logout_button()
+
+if user.role == ROLE_SYSTEM_ADMIN:
+    st.title("マイページ")
+    st.info("システム管理者はユーザー管理から各ユーザーの登録状況(印鑑等)を確認できます。マイページは対象外です。")
+    st.stop()
 
 st.title("マイページ")
 st.caption(f"{user.display_name}({user.role}) / ID: {user.username}")

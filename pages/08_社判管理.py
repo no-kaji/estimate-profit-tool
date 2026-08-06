@@ -17,7 +17,7 @@ logout_button()
 st.title("社判管理")
 
 if not user.can_manage_company_seal:
-    st.error("この画面はマネージャー・システム管理者のみ利用できます。")
+    st.error("この画面はマネージャーのみ利用できます。")
     st.stop()
 
 current = session.execute(select(CompanySeal).order_by(CompanySeal.registered_at.desc())).scalars().first()

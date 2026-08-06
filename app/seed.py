@@ -14,6 +14,7 @@ from app.models import (
     HeadquartersMaster,
     InsuranceRateMaster,
     PricingPattern,
+    RegionMaster,
     User,
 )
 
@@ -107,11 +108,15 @@ def seed_if_empty(session: Session) -> None:
     if session.query(BranchMaster).count() == 0:
         session.add(BranchMaster(name="本店"))
 
+    if session.query(RegionMaster).count() == 0:
+        session.add(RegionMaster(name="全国"))
+
     session.flush()
 
     if session.query(User).count() == 0:
         hq = session.query(HeadquartersMaster).first()
         branch = session.query(BranchMaster).first()
+        region = session.query(RegionMaster).first()
         session.add(
             User(
                 username=DEFAULT_ADMIN_USERNAME,
@@ -120,6 +125,7 @@ def seed_if_empty(session: Session) -> None:
                 role=ROLE_SYSTEM_ADMIN,
                 headquarters_id=hq.id if hq else None,
                 branch_id=branch.id if branch else None,
+                region_id=region.id if region else None,
             )
         )
 

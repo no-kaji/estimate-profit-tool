@@ -6,10 +6,9 @@ from sqlalchemy import select
 
 from app.auth import logout_button, require_login
 from app.db import get_session, init_db
-from app.seal import seal_img_tag
 from app.models import (
+    ROLE_MANAGER,
     BillingItemMaster,
-    CancellationPolicyMaster,
     ContractType,
     CostLine,
     FinancialRecord,
@@ -17,7 +16,9 @@ from app.models import (
     LineItem,
     PricingPattern,
     Project,
+    User,
 )
+from app.seal import seal_img_tag
 from app.services.calc import (
     CostLineInput,
     FinancialRecordSummary,
@@ -149,50 +150,95 @@ if record_type == "概算見積" and editing_record is not None:
         st.session_state["_copy_to_confirmed"] = editing_record.id
 
 # ---------------------------------------------------------------
-# 承認申請(確定見積の見積書発行フロー): 本人の個人印鑑 -> マネージャー承認で社判配置
+# 承認申請(確定見積の見積書発行フロー)
+# マネージャー/システム管理者が自ら作成した場合: その場で自己承認(社判も自分で配置)
+# ユーザーが作成した場合: 個人印鑑を押し、所属拠点のマネージャーを選んで承認を申請
 # ---------------------------------------------------------------
 if record_type == "確定見積" and editing_record is not None:
     status = editing_record.approval_status
     badge_map = {"下書き": "⚪ 下書き", "申請中": "🟡 承認申請中", "承認済み": "🟢 承認済み(社判配置済み)", "却下": "🔴 却下"}
     st.info(f"承認ステータス: {badge_map.get(status, status)}")
 
-    if status in ("下書き", "却下") and user.seal_svg:
+    if status in ("下書き", "却下") and not user.seal_svg:
+        st.warning("承認フローに進める前に、マイページで個人印鑑を生成してください。")
+    elif status in ("下書き", "却下") and user.can_self_approve:
 
-        @st.dialog("承認フロー申請")
-        def _confirm_submit_dialog(record_id: int):
-            st.write("この内容で承認フローに申請しますか?申請するとマネージャーの承認待ちになります。")
+        @st.dialog("承認フロー")
+        def _self_approve_dialog(record_id: int):
+            st.write("あなた自身の承認として、この内容を承認済みにします(社判もあわせて配置されます)。")
             st.markdown(seal_img_tag(user.seal_svg, size=70), unsafe_allow_html=True)
-            st.caption("↑あなたの個人印鑑がこの見積書に配置されます。")
             dc1, dc2 = st.columns(2)
-            if dc1.button("申請する", type="primary", use_container_width=True):
+            if dc1.button("承認する", type="primary", use_container_width=True):
                 rec = session.get(FinancialRecord, record_id)
-                rec.approval_status = "申請中"
+                now = dt.datetime.utcnow()
+                rec.approval_status = "承認済み"
                 rec.requested_by_id = user.id
-                rec.requested_at = dt.datetime.utcnow()
+                rec.requested_at = now
+                rec.approved_by_id = user.id
+                rec.approved_at = now
                 rec.reject_reason = None
                 session.commit()
-                st.session_state["_approval_submitted"] = True
+                st.session_state["_approval_submitted"] = "self"
                 st.rerun()
             if dc2.button("キャンセル", use_container_width=True):
                 st.rerun()
 
-        if st.button("完了(承認フローに申請)", type="primary"):
-            _confirm_submit_dialog(editing_record.id)
-    elif status in ("下書き", "却下") and not user.seal_svg:
-        st.warning("承認フローに申請する前に、マイページで個人印鑑を生成してください。")
+        if st.button("完了(自己承認・社判配置)", type="primary"):
+            _self_approve_dialog(editing_record.id)
+    elif status in ("下書き", "却下"):
+        candidate_managers = session.execute(
+            select(User).where(User.role == ROLE_MANAGER, User.branch_id == user.branch_id, User.active.is_(True))
+        ).scalars().all()
+        if not candidate_managers:
+            st.warning("あなたの所属拠点に承認可能なマネージャーが登録されていません。システム管理者にお問い合わせください。")
+        else:
+            mgr_options = {m.id: m.display_name or m.username for m in candidate_managers}
+            approver_id = st.selectbox("承認を依頼するマネージャー", options=list(mgr_options.keys()), format_func=lambda i: mgr_options[i])
+
+            @st.dialog("承認フロー申請")
+            def _confirm_submit_dialog(record_id: int, approver_id: int):
+                st.write(f"「{mgr_options[approver_id]}」さんに承認を申請しますか?")
+                st.markdown(seal_img_tag(user.seal_svg, size=70), unsafe_allow_html=True)
+                st.caption("↑あなたの個人印鑑がこの見積書に配置されます。")
+                dc1, dc2 = st.columns(2)
+                if dc1.button("申請する", type="primary", use_container_width=True):
+                    rec = session.get(FinancialRecord, record_id)
+                    rec.approval_status = "申請中"
+                    rec.requested_by_id = user.id
+                    rec.requested_at = dt.datetime.utcnow()
+                    rec.assigned_approver_id = approver_id
+                    rec.reject_reason = None
+                    session.commit()
+                    st.session_state["_approval_submitted"] = "requested"
+                    st.rerun()
+                if dc2.button("キャンセル", use_container_width=True):
+                    st.rerun()
+
+            if st.button("完了(承認フローに申請)", type="primary"):
+                _confirm_submit_dialog(editing_record.id, approver_id)
     elif status == "申請中":
-        st.caption(f"申請日時: {editing_record.requested_at} / 承認者からの回答をお待ちください。")
+        st.caption(
+            f"申請日時: {editing_record.requested_at} / "
+            f"承認依頼先: {editing_record.assigned_approver.display_name if editing_record.assigned_approver else ''} "
+            "からの回答をお待ちください。"
+        )
     elif status == "承認済み":
         st.caption(f"承認日時: {editing_record.approved_at} / 承認者: {editing_record.approved_by.display_name if editing_record.approved_by else ''}")
 
-    if st.session_state.pop("_approval_submitted", False):
+    _submitted = st.session_state.pop("_approval_submitted", None)
+    if _submitted == "self":
+        st.success("承認済みにしました。社判が配置されます。")
+    elif _submitted == "requested":
         st.success("承認フローに申請しました。マネージャーの承認をお待ちください。")
 
 # ---------------------------------------------------------------
 # 明細行(人件費)
 # ---------------------------------------------------------------
 st.subheader("明細行(人件費)")
-st.caption("個人名ではなく「請求科目」を単位として入力します。社保加入区分は社内用で、見積書には表示されません。")
+st.caption(
+    "個人名ではなく「請求科目」を単位として入力します。列名の【請求】はお客様への請求額、"
+    "【原価】は実際にかかる費用です。社保加入区分は社内用で、見積書には表示されません。"
+)
 
 billing_items = session.execute(select(BillingItemMaster)).scalars().all()
 billing_item_names = [b.item_name for b in billing_items]
@@ -208,6 +254,12 @@ with st.expander("＋ 請求科目マスタに新しい項目を追加"):
 patterns_for_contract = [p.name for p in contract_type.patterns]
 all_patterns = [p.name for p in session.execute(select(PricingPattern)).scalars().all()]
 
+LINE_ITEM_COLUMNS = [
+    "請求科目", "社保加入区分(社内用)", "人数",
+    "【請求】日額単価", "【請求】日数",
+    "【原価】計算パターン", "【原価】単価", "【原価】数量1", "【原価】数量2", "【原価】数量3",
+]
+
 if "line_items_df" not in st.session_state or st.session_state.get("_line_items_loaded_for") != (project.id, editing_record.id if editing_record else None):
     if editing_record:
         rows = [
@@ -215,22 +267,19 @@ if "line_items_df" not in st.session_state or st.session_state.get("_line_items_
                 "請求科目": li.billing_item_display,
                 "社保加入区分(社内用)": li.insurance_status,
                 "人数": li.headcount,
-                "請求日額単価": li.billing_daily_rate,
-                "請求日数": li.billing_days,
-                "支払計算パターン": (li.payment_pricing_pattern.name if li.payment_pricing_pattern else patterns_for_contract[0]),
-                "支払単価": li.payment_rate,
-                "数量1": li.payment_qty1,
-                "数量2": li.payment_qty2,
-                "数量3": li.payment_qty3,
+                "【請求】日額単価": li.billing_daily_rate,
+                "【請求】日数": li.billing_days,
+                "【原価】計算パターン": (li.payment_pricing_pattern.name if li.payment_pricing_pattern else patterns_for_contract[0]),
+                "【原価】単価": li.payment_rate,
+                "【原価】数量1": li.payment_qty1,
+                "【原価】数量2": li.payment_qty2,
+                "【原価】数量3": li.payment_qty3,
             }
             for li in editing_record.line_items
         ]
     else:
         rows = []
-    st.session_state["line_items_df"] = pd.DataFrame(
-        rows,
-        columns=["請求科目", "社保加入区分(社内用)", "人数", "請求日額単価", "請求日数", "支払計算パターン", "支払単価", "数量1", "数量2", "数量3"],
-    )
+    st.session_state["line_items_df"] = pd.DataFrame(rows, columns=LINE_ITEM_COLUMNS)
     st.session_state["_line_items_loaded_for"] = (project.id, editing_record.id if editing_record else None)
 
 line_items_df = st.data_editor(
@@ -241,44 +290,54 @@ line_items_df = st.data_editor(
         "請求科目": st.column_config.SelectboxColumn(options=billing_item_names, required=False),
         "社保加入区分(社内用)": st.column_config.SelectboxColumn(options=["済", "未", "外注"]),
         "人数": st.column_config.NumberColumn(min_value=0, step=1),
-        "請求日額単価": st.column_config.NumberColumn(format="¥%d", min_value=0, step=100),
-        "請求日数": st.column_config.NumberColumn(min_value=0, step=1),
-        "支払計算パターン": st.column_config.SelectboxColumn(options=patterns_for_contract),
-        "支払単価": st.column_config.NumberColumn(format="¥%d", min_value=0, step=100),
-        "数量1": st.column_config.NumberColumn(min_value=0, step=1),
-        "数量2": st.column_config.NumberColumn(min_value=0, step=1),
-        "数量3": st.column_config.NumberColumn(min_value=0, step=1),
+        "【請求】日額単価": st.column_config.NumberColumn(format="¥%d", min_value=0, step=100),
+        "【請求】日数": st.column_config.NumberColumn(min_value=0, step=1),
+        "【原価】計算パターン": st.column_config.SelectboxColumn(options=patterns_for_contract),
+        "【原価】単価": st.column_config.NumberColumn(format="¥%d", min_value=0, step=100),
+        "【原価】数量1": st.column_config.NumberColumn(min_value=0, step=1),
+        "【原価】数量2": st.column_config.NumberColumn(min_value=0, step=1),
+        "【原価】数量3": st.column_config.NumberColumn(min_value=0, step=1),
     },
     key="line_items_editor",
 )
-# ここで st.session_state["line_items_df"] に編集結果を書き戻さないこと。
-# data_editorのdata引数と同じキーへ毎回書き戻すと、1回目の編集が表示に反映されず
-# 2回目でようやく反映される不具合が起きる(Streamlitの既知の挙動)。
-# 編集結果はこの後の計算処理でローカル変数 line_items_df をそのまま使う。
+# ここで st.session_state["line_items_df"] に編集結果を書き戻さないこと(Streamlitの既知の挙動で
+# 1回目の編集が反映されず2回目でようやく反映される不具合につながる)。以降はローカル変数を使う。
 
 # ---------------------------------------------------------------
-# 経費行
+# 経費行(請求側・原価側を別々に入力する)
 # ---------------------------------------------------------------
 st.subheader("経費")
-st.caption("契約形式に縛られず、計算パターンを直接選択できます。")
+st.caption("契約形式に縛られず、計算パターンを直接選択できます。【請求】お客様への請求額、【原価】実際にかかる費用、を別々に入力します。")
+
+COST_LINE_COLUMNS = [
+    "費目",
+    "【請求】計算パターン", "【請求】単価", "【請求】数量1", "【請求】数量2", "【請求】数量3",
+    "【原価】計算パターン", "【原価】単価", "【原価】数量1", "【原価】数量2", "【原価】数量3",
+    "区分",
+]
 
 if "cost_lines_df" not in st.session_state or st.session_state.get("_cost_lines_loaded_for") != (project.id, editing_record.id if editing_record else None):
     if editing_record:
         rows = [
             {
                 "費目": cl.category,
-                "計算パターン": (cl.pricing_pattern.name if cl.pricing_pattern else all_patterns[0]),
-                "単価": cl.rate,
-                "数量1": cl.qty1,
-                "数量2": cl.qty2,
-                "数量3": cl.qty3,
+                "【請求】計算パターン": (cl.billing_pricing_pattern.name if cl.billing_pricing_pattern else all_patterns[0]),
+                "【請求】単価": cl.billing_rate,
+                "【請求】数量1": cl.billing_qty1,
+                "【請求】数量2": cl.billing_qty2,
+                "【請求】数量3": cl.billing_qty3,
+                "【原価】計算パターン": (cl.cost_pricing_pattern.name if cl.cost_pricing_pattern else all_patterns[0]),
+                "【原価】単価": cl.cost_rate,
+                "【原価】数量1": cl.cost_qty1,
+                "【原価】数量2": cl.cost_qty2,
+                "【原価】数量3": cl.cost_qty3,
                 "区分": cl.timing,
             }
             for cl in editing_record.cost_lines
         ]
     else:
         rows = []
-    st.session_state["cost_lines_df"] = pd.DataFrame(rows, columns=["費目", "計算パターン", "単価", "数量1", "数量2", "数量3", "区分"])
+    st.session_state["cost_lines_df"] = pd.DataFrame(rows, columns=COST_LINE_COLUMNS)
     st.session_state["_cost_lines_loaded_for"] = (project.id, editing_record.id if editing_record else None)
 
 cost_lines_df = st.data_editor(
@@ -286,11 +345,16 @@ cost_lines_df = st.data_editor(
     num_rows="dynamic",
     use_container_width=True,
     column_config={
-        "計算パターン": st.column_config.SelectboxColumn(options=all_patterns),
-        "単価": st.column_config.NumberColumn(format="¥%d", min_value=0, step=100),
-        "数量1": st.column_config.NumberColumn(min_value=0, step=1),
-        "数量2": st.column_config.NumberColumn(min_value=0, step=1),
-        "数量3": st.column_config.NumberColumn(min_value=0, step=1),
+        "【請求】計算パターン": st.column_config.SelectboxColumn(options=all_patterns),
+        "【請求】単価": st.column_config.NumberColumn(format="¥%d", min_value=0, step=100),
+        "【請求】数量1": st.column_config.NumberColumn(min_value=0, step=1),
+        "【請求】数量2": st.column_config.NumberColumn(min_value=0, step=1),
+        "【請求】数量3": st.column_config.NumberColumn(min_value=0, step=1),
+        "【原価】計算パターン": st.column_config.SelectboxColumn(options=all_patterns),
+        "【原価】単価": st.column_config.NumberColumn(format="¥%d", min_value=0, step=100),
+        "【原価】数量1": st.column_config.NumberColumn(min_value=0, step=1),
+        "【原価】数量2": st.column_config.NumberColumn(min_value=0, step=1),
+        "【原価】数量3": st.column_config.NumberColumn(min_value=0, step=1),
         "区分": st.column_config.SelectboxColumn(options=["イニシャル", "ランニング"]),
     },
     key="cost_lines_editor",
@@ -313,32 +377,42 @@ pattern_by_name = {p.name: p for p in session.execute(select(PricingPattern)).sc
 
 line_results = []
 for _, row in line_items_df.iterrows():
-    pattern = pattern_by_name.get(row.get("支払計算パターン"))
+    pattern = pattern_by_name.get(row.get("【原価】計算パターン"))
     is_hourly = pattern is not None and pattern.name == "時間×日数×月数"
     item_input = LineItemInput(
-        billing_daily_rate=float(row.get("請求日額単価") or 0),
-        billing_days=float(row.get("請求日数") or 0),
+        billing_daily_rate=float(row.get("【請求】日額単価") or 0),
+        billing_days=float(row.get("【請求】日数") or 0),
         headcount=int(row.get("人数") or 1),
-        payment_rate=float(row.get("支払単価") or 0),
-        payment_qty1=float(row.get("数量1") or 1) if pattern and pattern.qty1_label else None,
-        payment_qty2=float(row.get("数量2") or 1) if pattern and pattern.qty2_label else None,
-        payment_qty3=float(row.get("数量3") or 1) if pattern and pattern.qty3_label else None,
+        payment_rate=float(row.get("【原価】単価") or 0),
+        payment_qty1=float(row.get("【原価】数量1") or 1) if pattern and pattern.qty1_label else None,
+        payment_qty2=float(row.get("【原価】数量2") or 1) if pattern and pattern.qty2_label else None,
+        payment_qty3=float(row.get("【原価】数量3") or 1) if pattern and pattern.qty3_label else None,
         is_hourly_pattern=is_hourly,
     )
     line_results.append(calc_line_item(item_input, insurance_rate))
 
-cost_amounts = []
+cost_billing_amounts = []
+cost_cost_amounts = []
 for _, row in cost_lines_df.iterrows():
-    pattern = pattern_by_name.get(row.get("計算パターン"))
-    cost_input = CostLineInput(
-        rate=float(row.get("単価") or 0),
-        qty1=float(row.get("数量1") or 1) if pattern and pattern.qty1_label else None,
-        qty2=float(row.get("数量2") or 1) if pattern and pattern.qty2_label else None,
-        qty3=float(row.get("数量3") or 1) if pattern and pattern.qty3_label else None,
+    billing_pattern = pattern_by_name.get(row.get("【請求】計算パターン"))
+    billing_input = CostLineInput(
+        rate=float(row.get("【請求】単価") or 0),
+        qty1=float(row.get("【請求】数量1") or 1) if billing_pattern and billing_pattern.qty1_label else None,
+        qty2=float(row.get("【請求】数量2") or 1) if billing_pattern and billing_pattern.qty2_label else None,
+        qty3=float(row.get("【請求】数量3") or 1) if billing_pattern and billing_pattern.qty3_label else None,
     )
-    cost_amounts.append(calc_cost_line_amount(cost_input))
+    cost_billing_amounts.append(calc_cost_line_amount(billing_input))
 
-summary: FinancialRecordSummary = calc_financial_record_summary(line_results, cost_amounts)
+    cost_pattern = pattern_by_name.get(row.get("【原価】計算パターン"))
+    cost_input = CostLineInput(
+        rate=float(row.get("【原価】単価") or 0),
+        qty1=float(row.get("【原価】数量1") or 1) if cost_pattern and cost_pattern.qty1_label else None,
+        qty2=float(row.get("【原価】数量2") or 1) if cost_pattern and cost_pattern.qty2_label else None,
+        qty3=float(row.get("【原価】数量3") or 1) if cost_pattern and cost_pattern.qty3_label else None,
+    )
+    cost_cost_amounts.append(calc_cost_line_amount(cost_input))
+
+summary: FinancialRecordSummary = calc_financial_record_summary(line_results, cost_billing_amounts, cost_cost_amounts)
 
 st.subheader("収支サマリ")
 m1, m2, m3, m4, m5 = st.columns(5)
@@ -348,15 +422,25 @@ m3.metric("粗利", f"¥{summary.profit:,.0f}")
 m4.metric("粗利率", f"{summary.margin * 100:.1f}%")
 m5.metric("営業利益", f"¥{summary.operating_profit:,.0f}")
 
-with st.expander("経営ボード明細用の追加項目(統括名称・地域区分・セグメント 等)"):
+st.caption(
+    f"統括名称: {user.headquarters.name if user.headquarters else '未設定'} / "
+    f"部門名称: {user.branch.name if user.branch else '未設定'} / "
+    f"地域区分: {user.region.name if user.region else '未設定'}"
+    "(あなたのプロフィールから自動的にタグ付けされます。マイページでは変更できません。"
+    "システム管理者にご相談ください)"
+)
+
+with st.expander("経営ボード明細用の追加項目(セグメント・商材・常勤/CA 等)"):
     d1, d2, d3 = st.columns(3)
-    headquarters_name = d1.text_input("統括名称", value=editing_record.headquarters_name if editing_record else "")
-    region = d2.text_input("地域区分", value=editing_record.region if editing_record else "")
-    segment = d3.text_input("セグメント", value=editing_record.segment if editing_record else "")
-    d4, d5, d6 = st.columns(3)
-    product = d4.text_input("商材", value=editing_record.product if editing_record else "")
-    order_status = d5.text_input("受注状況", value=editing_record.order_status if editing_record else "")
-    unit_name = d6.text_input("ユニット名称", value=editing_record.unit_name if editing_record else "")
+    segment = d1.text_input("セグメント", value=editing_record.segment if editing_record else "")
+    product = d2.text_input("商材", value=editing_record.product if editing_record else "")
+    employment_type = d3.selectbox(
+        "常勤・CA", options=["常勤", "CA"],
+        index=(["常勤", "CA"].index(editing_record.employment_type) if editing_record and editing_record.employment_type in ("常勤", "CA") else 0),
+    )
+    d4, d5 = st.columns(2)
+    order_status = d4.text_input("受注状況", value=editing_record.order_status if editing_record else "")
+    unit_name = d5.text_input("ユニット名称", value=editing_record.unit_name if editing_record else "")
 
 # ---------------------------------------------------------------
 # 保存
@@ -372,10 +456,11 @@ if st.button("保存", type="primary"):
     rec.contract_type_id = contract_type.id
     rec.period_start = period_start
     rec.period_end = period_end
-    rec.headquarters_name = headquarters_name
-    rec.region = region
+    rec.headquarters_name = user.headquarters.name if user.headquarters else ""
+    rec.region = user.region.name if user.region else ""
     rec.segment = segment
     rec.product = product
+    rec.employment_type = employment_type
     rec.order_status = order_status
     rec.unit_name = unit_name
     session.flush()
@@ -387,7 +472,7 @@ if st.button("保存", type="primary"):
     for _, row in line_items_df.iterrows():
         if not row.get("請求科目"):
             continue
-        pattern = pattern_by_name.get(row.get("支払計算パターン"))
+        pattern = pattern_by_name.get(row.get("【原価】計算パターン"))
         billing_item = billing_item_by_name.get(row.get("請求科目"))
         session.add(
             LineItem(
@@ -396,28 +481,34 @@ if st.button("保存", type="primary"):
                 billing_item_name_free=None if billing_item else row.get("請求科目"),
                 insurance_status=row.get("社保加入区分(社内用)") or "済",
                 headcount=int(row.get("人数") or 1),
-                billing_daily_rate=float(row.get("請求日額単価") or 0),
-                billing_days=float(row.get("請求日数") or 0),
+                billing_daily_rate=float(row.get("【請求】日額単価") or 0),
+                billing_days=float(row.get("【請求】日数") or 0),
                 payment_pricing_pattern_id=pattern.id if pattern else None,
-                payment_rate=float(row.get("支払単価") or 0),
-                payment_qty1=float(row.get("数量1") or 1),
-                payment_qty2=float(row.get("数量2") or 1),
-                payment_qty3=float(row.get("数量3") or 1),
+                payment_rate=float(row.get("【原価】単価") or 0),
+                payment_qty1=float(row.get("【原価】数量1") or 1),
+                payment_qty2=float(row.get("【原価】数量2") or 1),
+                payment_qty3=float(row.get("【原価】数量3") or 1),
             )
         )
     for _, row in cost_lines_df.iterrows():
         if not row.get("費目"):
             continue
-        pattern = pattern_by_name.get(row.get("計算パターン"))
+        billing_pattern = pattern_by_name.get(row.get("【請求】計算パターン"))
+        cost_pattern = pattern_by_name.get(row.get("【原価】計算パターン"))
         session.add(
             CostLine(
                 financial_record_id=rec.id,
                 category=row.get("費目"),
-                pricing_pattern_id=pattern.id if pattern else None,
-                rate=float(row.get("単価") or 0),
-                qty1=float(row.get("数量1") or 1),
-                qty2=float(row.get("数量2") or 1),
-                qty3=float(row.get("数量3") or 1),
+                billing_pricing_pattern_id=billing_pattern.id if billing_pattern else None,
+                billing_rate=float(row.get("【請求】単価") or 0),
+                billing_qty1=float(row.get("【請求】数量1") or 1),
+                billing_qty2=float(row.get("【請求】数量2") or 1),
+                billing_qty3=float(row.get("【請求】数量3") or 1),
+                cost_pricing_pattern_id=cost_pattern.id if cost_pattern else None,
+                cost_rate=float(row.get("【原価】単価") or 0),
+                cost_qty1=float(row.get("【原価】数量1") or 1),
+                cost_qty2=float(row.get("【原価】数量2") or 1),
+                cost_qty3=float(row.get("【原価】数量3") or 1),
                 timing=row.get("区分") or "ランニング",
             )
         )
@@ -439,6 +530,7 @@ if st.session_state.get("_copy_to_confirmed"):
             region=src.region,
             segment=src.segment,
             product=src.product,
+            employment_type=src.employment_type,
             order_status=src.order_status,
             unit_name=src.unit_name,
             created_by_id=user.id,
@@ -467,11 +559,16 @@ if st.session_state.get("_copy_to_confirmed"):
                 CostLine(
                     financial_record_id=new_rec.id,
                     category=cl.category,
-                    pricing_pattern_id=cl.pricing_pattern_id,
-                    rate=cl.rate,
-                    qty1=cl.qty1,
-                    qty2=cl.qty2,
-                    qty3=cl.qty3,
+                    billing_pricing_pattern_id=cl.billing_pricing_pattern_id,
+                    billing_rate=cl.billing_rate,
+                    billing_qty1=cl.billing_qty1,
+                    billing_qty2=cl.billing_qty2,
+                    billing_qty3=cl.billing_qty3,
+                    cost_pricing_pattern_id=cl.cost_pricing_pattern_id,
+                    cost_rate=cl.cost_rate,
+                    cost_qty1=cl.cost_qty1,
+                    cost_qty2=cl.cost_qty2,
+                    cost_qty3=cl.cost_qty3,
                     timing=cl.timing,
                 )
             )

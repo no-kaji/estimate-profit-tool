@@ -36,6 +36,14 @@ def _qt_of(month_date: dt.date, fiscal_start_month: int = 4) -> str:
     return f"{offset // 3 + 1}QT"
 
 
+def _department_name(record: FinancialRecord) -> str:
+    """部門名称は作成者の所属拠点(=経営ボード明細上の部門名称)を優先し、
+    未設定の場合のみ案件の部署名にフォールバックする。"""
+    if record.created_by is not None and record.created_by.branch is not None:
+        return record.created_by.branch.name
+    return record.project.dept
+
+
 def _record_sales_cost(session: Session, record: FinancialRecord, insurance_rate: float) -> tuple[float, float, int]:
     line_items = session.query(LineItem).filter(LineItem.financial_record_id == record.id).all()
     total_sales = 0.0
@@ -80,22 +88,36 @@ def build_confirmed_estimate_rows(session: Session, record: FinancialRecord) -> 
     line_sales, line_cost, headcount = _record_sales_cost(session, record, insurance_rate)
 
     cost_lines = session.query(CostLine).filter(CostLine.financial_record_id == record.id).all()
-    initial_total = sum(c.rate * (c.qty1 or 1) * (c.qty2 or 1) * (c.qty3 or 1) for c in cost_lines if c.timing == "イニシャル")
-    running_total = sum(c.rate * (c.qty1 or 1) * (c.qty2 or 1) * (c.qty3 or 1) for c in cost_lines if c.timing != "イニシャル")
+    initial_billing = sum(
+        c.billing_rate * (c.billing_qty1 or 1) * (c.billing_qty2 or 1) * (c.billing_qty3 or 1)
+        for c in cost_lines if c.timing == "イニシャル"
+    )
+    running_billing = sum(
+        c.billing_rate * (c.billing_qty1 or 1) * (c.billing_qty2 or 1) * (c.billing_qty3 or 1)
+        for c in cost_lines if c.timing != "イニシャル"
+    )
+    initial_cost = sum(
+        c.cost_rate * (c.cost_qty1 or 1) * (c.cost_qty2 or 1) * (c.cost_qty3 or 1)
+        for c in cost_lines if c.timing == "イニシャル"
+    )
+    running_cost = sum(
+        c.cost_rate * (c.cost_qty1 or 1) * (c.cost_qty2 or 1) * (c.cost_qty3 or 1)
+        for c in cost_lines if c.timing != "イニシャル"
+    )
 
     months = _month_range(record.period_start, record.period_end)
     rows = []
     for i, month in enumerate(months):
-        month_sales = line_sales + running_total + (initial_total if i == 0 else 0)
-        month_cost = line_cost + running_total + (initial_total if i == 0 else 0)
+        month_sales = line_sales + running_billing + (initial_billing if i == 0 else 0)
+        month_cost = line_cost + running_cost + (initial_cost if i == 0 else 0)
         rows.append(
             {
                 "会社": COMPANY_NAME,
                 "区分": "予算",
-                "常勤・CA": "",
+                "常勤・CA": record.employment_type,
                 "年月": month.strftime("%Y%m"),
                 "統括名称": record.headquarters_name,
-                "部門名称": record.project.dept,
+                "部門名称": _department_name(record),
                 "取引先名称": record.project.client_name,
                 "地域区分": record.region,
                 "セグメント": record.segment,
@@ -133,10 +155,10 @@ def build_actual_rows(session: Session, record: FinancialRecord) -> list[dict]:
             {
                 "会社": COMPANY_NAME,
                 "区分": "実績",
-                "常勤・CA": "",
+                "常勤・CA": record.employment_type,
                 "年月": ym,
                 "統括名称": record.headquarters_name,
-                "部門名称": record.project.dept,
+                "部門名称": _department_name(record),
                 "取引先名称": record.project.client_name,
                 "地域区分": record.region,
                 "セグメント": record.segment,

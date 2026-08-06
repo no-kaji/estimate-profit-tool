@@ -168,11 +168,16 @@ with log_errors(session, "01_案件一覧", user):
                                     CostLine(
                                         financial_record_id=new_rec.id,
                                         category=cl.category,
-                                        pricing_pattern_id=cl.pricing_pattern_id,
-                                        rate=cl.rate,
-                                        qty1=cl.qty1,
-                                        qty2=cl.qty2,
-                                        qty3=cl.qty3,
+                                        billing_pricing_pattern_id=cl.billing_pricing_pattern_id,
+                                        billing_rate=cl.billing_rate,
+                                        billing_qty1=cl.billing_qty1,
+                                        billing_qty2=cl.billing_qty2,
+                                        billing_qty3=cl.billing_qty3,
+                                        cost_pricing_pattern_id=cl.cost_pricing_pattern_id,
+                                        cost_rate=cl.cost_rate,
+                                        cost_qty1=cl.cost_qty1,
+                                        cost_qty2=cl.cost_qty2,
+                                        cost_qty3=cl.cost_qty3,
                                         timing=cl.timing,
                                     )
                                 )

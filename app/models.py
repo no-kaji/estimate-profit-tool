@@ -104,9 +104,18 @@ class HeadquartersMaster(Base):
 
 
 class BranchMaster(Base):
-    """組織属性: 拠点名称マスタ。ユーザーの所属割り当てに使う。"""
+    """組織属性: 拠点名称マスタ(=経営ボード明細の「部門名称」として使う)。ユーザーの所属割り当てに使う。"""
 
     __tablename__ = "branch_masters"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(unique=True)
+
+
+class RegionMaster(Base):
+    """組織属性: 地域区分マスタ。ユーザーの所属割り当てに使う。"""
+
+    __tablename__ = "region_masters"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(unique=True)
@@ -128,10 +137,12 @@ class User(Base):
     role: Mapped[str] = mapped_column(default=ROLE_USER)
     headquarters_id: Mapped[int | None] = mapped_column(ForeignKey("headquarters_masters.id"), default=None)
     branch_id: Mapped[int | None] = mapped_column(ForeignKey("branch_masters.id"), default=None)
+    region_id: Mapped[int | None] = mapped_column(ForeignKey("region_masters.id"), default=None)
     active: Mapped[bool] = mapped_column(default=True)
 
     headquarters: Mapped["HeadquartersMaster | None"] = relationship()
     branch: Mapped["BranchMaster | None"] = relationship()
+    region: Mapped["RegionMaster | None"] = relationship()
     seal_svg: Mapped[str | None] = mapped_column(default=None)  # マイページで生成する個人印鑑(SVG文字列)
 
     @property
@@ -152,10 +163,15 @@ class User(Base):
 
     @property
     def can_manage_company_seal(self) -> bool:
-        return self.role in (ROLE_SYSTEM_ADMIN, ROLE_MANAGER)
+        return self.role == ROLE_MANAGER
 
     @property
     def can_approve(self) -> bool:
+        return self.role == ROLE_MANAGER
+
+    @property
+    def can_self_approve(self) -> bool:
+        """自身が作成した確定見積を、他者の承認を経ずに自分で承認済みにできるか。"""
         return self.role in (ROLE_SYSTEM_ADMIN, ROLE_MANAGER)
 
 
@@ -226,10 +242,14 @@ class FinancialRecord(Base):
     order_status: Mapped[str] = mapped_column(default="")
     unit_name: Mapped[str] = mapped_column(default="")
     headquarters_name: Mapped[str] = mapped_column(default="")
+    employment_type: Mapped[str] = mapped_column(default="")  # 常勤・CA(見積単位の単一選択、経営ボード明細用)
     deleted_at: Mapped[dt.datetime | None] = mapped_column(default=None)
 
     # 承認フロー(確定見積の見積書発行用): 下書き -> 申請中 -> 承認済み/却下
+    # マネージャー・システム管理者が自ら作成した場合は申請不要でその場で承認済みにできる。
+    # ユーザーが作成した場合は、所属拠点(部門)のマネージャーを選んで申請する。
     approval_status: Mapped[str] = mapped_column(default="下書き")
+    assigned_approver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
     requested_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
     requested_at: Mapped[dt.datetime | None] = mapped_column(default=None)
     approved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
@@ -246,6 +266,7 @@ class FinancialRecord(Base):
     requested_by: Mapped["User | None"] = relationship(foreign_keys=[requested_by_id])
     approved_by: Mapped["User | None"] = relationship(foreign_keys=[approved_by_id])
     created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_id])
+    assigned_approver: Mapped["User | None"] = relationship(foreign_keys=[assigned_approver_id])
     weekly_actuals: Mapped[list["WeeklyActual"]] = relationship(back_populates="financial_record", cascade="all, delete-orphan")
 
 
@@ -296,20 +317,35 @@ class LineItem(Base):
 
 
 class CostLine(Base):
+    """経費行。請求側(顧客への請求額)と原価側(実際にかかる費用)を別々に持つ。
+
+    2026-08-06修正: 従来は単一の単価×数量を売上・原価の両方にパススルー計上していたが、
+    「経費の原価入力がない」との指摘を受け、LineItemと同様に請求側/原価側を分離した。
+    """
+
     __tablename__ = "cost_lines"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     financial_record_id: Mapped[int] = mapped_column(ForeignKey("financial_records.id"))
     category: Mapped[str] = mapped_column(default="")
-    pricing_pattern_id: Mapped[int | None] = mapped_column(ForeignKey("pricing_patterns.id"), default=None)
-    rate: Mapped[float] = mapped_column(default=0.0)
-    qty1: Mapped[float] = mapped_column(default=1.0)
-    qty2: Mapped[float] = mapped_column(default=1.0)
-    qty3: Mapped[float] = mapped_column(default=1.0)
+
+    billing_pricing_pattern_id: Mapped[int | None] = mapped_column(ForeignKey("pricing_patterns.id"), default=None)
+    billing_rate: Mapped[float] = mapped_column(default=0.0)
+    billing_qty1: Mapped[float] = mapped_column(default=1.0)
+    billing_qty2: Mapped[float] = mapped_column(default=1.0)
+    billing_qty3: Mapped[float] = mapped_column(default=1.0)
+
+    cost_pricing_pattern_id: Mapped[int | None] = mapped_column(ForeignKey("pricing_patterns.id"), default=None)
+    cost_rate: Mapped[float] = mapped_column(default=0.0)
+    cost_qty1: Mapped[float] = mapped_column(default=1.0)
+    cost_qty2: Mapped[float] = mapped_column(default=1.0)
+    cost_qty3: Mapped[float] = mapped_column(default=1.0)
+
     timing: Mapped[str] = mapped_column(default="ランニング")  # イニシャル/ランニング
 
     financial_record: Mapped["FinancialRecord"] = relationship(back_populates="cost_lines")
-    pricing_pattern: Mapped["PricingPattern | None"] = relationship()
+    billing_pricing_pattern: Mapped["PricingPattern | None"] = relationship(foreign_keys=[billing_pricing_pattern_id])
+    cost_pricing_pattern: Mapped["PricingPattern | None"] = relationship(foreign_keys=[cost_pricing_pattern_id])
 
 
 class WeeklyActual(Base):

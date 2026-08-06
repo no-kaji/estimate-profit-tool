@@ -3,7 +3,7 @@ from sqlalchemy import select
 
 from app.auth import hash_password, logout_button, require_login
 from app.db import get_session, init_db
-from app.models import ROLES, BranchMaster, ErrorLog, HeadquartersMaster, User
+from app.models import ROLE_MANAGER, ROLES, BranchMaster, ErrorLog, HeadquartersMaster, RegionMaster, User
 from app.seal import seal_img_tag
 from app.ui import apply_theme
 
@@ -15,6 +15,7 @@ apply_theme()
 logout_button()
 
 st.title("システム管理")
+st.caption("ユーザーの権限・組織属性の割り当てまでを行います。社判登録・承認申請の処理自体はマネージャーが行います。")
 
 if not user.can_manage_users:
     st.error("この画面はシステム管理者のみ利用できます。")
@@ -29,13 +30,20 @@ with tab_users:
     st.subheader("ユーザー一覧")
     headquarters = session.execute(select(HeadquartersMaster)).scalars().all()
     branches = session.execute(select(BranchMaster)).scalars().all()
+    regions = session.execute(select(RegionMaster)).scalars().all()
     hq_options = {h.id: h.name for h in headquarters}
     branch_options = {b.id: b.name for b in branches}
+    region_options = {r.id: r.name for r in regions}
 
     users = session.execute(select(User)).scalars().all()
+    managers_by_branch: dict[int | None, list[User]] = {}
+    for u in users:
+        if u.role == ROLE_MANAGER and u.active:
+            managers_by_branch.setdefault(u.branch_id, []).append(u)
+
     for u in users:
         with st.container(border=True):
-            c0, c1, c2, c3, c4 = st.columns([1, 2, 2, 2, 2])
+            c0, c1, c2, c3, c4, c5 = st.columns([1, 2, 2, 2, 2, 2])
             with c0:
                 if u.seal_svg:
                     st.markdown(seal_img_tag(u.seal_svg, size=48), unsafe_allow_html=True)
@@ -53,12 +61,29 @@ with tab_users:
                 key=f"hq_{u.id}",
             )
             new_branch = c4.selectbox(
-                "拠点",
+                "拠点(部門名称)",
                 options=[None] + list(branch_options.keys()),
                 format_func=lambda i: "未設定" if i is None else branch_options[i],
                 index=(0 if u.branch_id is None else list(branch_options.keys()).index(u.branch_id) + 1),
                 key=f"branch_{u.id}",
             )
+            new_region = c5.selectbox(
+                "地域区分",
+                options=[None] + list(region_options.keys()),
+                format_func=lambda i: "未設定" if i is None else region_options[i],
+                index=(0 if u.region_id is None else list(region_options.keys()).index(u.region_id) + 1),
+                key=f"region_{u.id}",
+            )
+
+            if u.role != ROLE_MANAGER:
+                mgrs = managers_by_branch.get(u.branch_id, [])
+                if u.branch_id is None:
+                    st.caption("承認可能なマネージャー: 拠点未設定のため判定できません")
+                elif mgrs:
+                    st.caption(f"承認可能なマネージャー: 有({', '.join(m.display_name or m.username for m in mgrs)})")
+                else:
+                    st.caption("承認可能なマネージャー: 無(この拠点にマネージャーがいません)")
+
             b1, b2, b3 = st.columns(3)
             if b1.button("有効/無効切替", key=f"toggle_active_{u.id}"):
                 u.active = not u.active
@@ -69,6 +94,7 @@ with tab_users:
                 u.role = new_role
                 u.headquarters_id = new_hq
                 u.branch_id = new_branch
+                u.region_id = new_region
                 session.commit()
                 st.success("保存しました。")
                 st.rerun()
@@ -86,7 +112,8 @@ with tab_users:
         password = st.text_input("初期パスワード", type="password")
         role = st.selectbox("ロール", options=ROLES)
         hq_id = st.selectbox("統括部門", options=[None] + list(hq_options.keys()), format_func=lambda i: "未設定" if i is None else hq_options[i])
-        branch_id = st.selectbox("拠点", options=[None] + list(branch_options.keys()), format_func=lambda i: "未設定" if i is None else branch_options[i])
+        branch_id = st.selectbox("拠点(部門名称)", options=[None] + list(branch_options.keys()), format_func=lambda i: "未設定" if i is None else branch_options[i])
+        region_id = st.selectbox("地域区分", options=[None] + list(region_options.keys()), format_func=lambda i: "未設定" if i is None else region_options[i])
         if st.form_submit_button("登録"):
             if username and password:
                 session.add(
@@ -97,6 +124,7 @@ with tab_users:
                         role=role,
                         headquarters_id=hq_id,
                         branch_id=branch_id,
+                        region_id=region_id,
                     )
                 )
                 session.commit()
@@ -106,10 +134,10 @@ with tab_users:
                 st.error("ユーザーIDと初期パスワードは必須です。")
 
 # ---------------------------------------------------------------
-# 組織属性マスタ(統括部門・拠点)
+# 組織属性マスタ(統括部門・拠点・地域区分)
 # ---------------------------------------------------------------
 with tab_org:
-    col_hq, col_branch = st.columns(2)
+    col_hq, col_branch, col_region = st.columns(3)
     with col_hq:
         st.subheader("統括部門名称マスタ")
         for h in headquarters:
@@ -122,7 +150,7 @@ with tab_org:
                     session.commit()
                     st.rerun()
     with col_branch:
-        st.subheader("拠点名称マスタ")
+        st.subheader("拠点名称マスタ(部門名称)")
         for b in branches:
             st.write(f"- {b.name}")
         with st.form("new_branch_form"):
@@ -130,6 +158,17 @@ with tab_org:
             if st.form_submit_button("追加"):
                 if name:
                     session.add(BranchMaster(name=name))
+                    session.commit()
+                    st.rerun()
+    with col_region:
+        st.subheader("地域区分マスタ")
+        for r in regions:
+            st.write(f"- {r.name}")
+        with st.form("new_region_form"):
+            name = st.text_input("新しい地域区分名")
+            if st.form_submit_button("追加"):
+                if name:
+                    session.add(RegionMaster(name=name))
                     session.commit()
                     st.rerun()
 

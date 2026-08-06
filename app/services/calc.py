@@ -125,15 +125,15 @@ class FinancialRecordSummary:
 
 def calc_financial_record_summary(
     line_item_results: list[LineItemResult],
-    cost_line_amounts: list[float],
+    cost_line_billing_amounts: list[float],
+    cost_line_cost_amounts: list[float],
     sga_cost: float = 0.0,
 ) -> FinancialRecordSummary:
-    """経費行(COST_LINE)は、実額の根拠(原価計上比率)がQA未確定のため、
-    現時点では売上・原価の両方に同額を計上するパススルー方式とする(粗利ゼロ寄与)。
-    外注費等でマージンを載せる運用が必要な場合は、QA時に雛形の実データと突き合わせて調整する。
+    """経費行(COST_LINE)は請求側・原価側を別々に受け取り、それぞれ売上・原価に計上する
+    (2026-08-06修正: 従来のパススルー方式から、請求/原価を別入力する方式に変更)。
     """
-    sales = sum(r.sales for r in line_item_results) + sum(cost_line_amounts)
-    cost = sum(r.cost_total for r in line_item_results) + sum(cost_line_amounts)
+    sales = sum(r.sales for r in line_item_results) + sum(cost_line_billing_amounts)
+    cost = sum(r.cost_total for r in line_item_results) + sum(cost_line_cost_amounts)
     profit = sales - cost
     margin = profit / sales if sales else 0.0
     operating_profit = profit - sga_cost

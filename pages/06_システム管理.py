@@ -4,6 +4,7 @@ from sqlalchemy import select
 from app.auth import hash_password, logout_button, require_login
 from app.db import get_session, init_db
 from app.models import ROLES, BranchMaster, ErrorLog, HeadquartersMaster, User
+from app.seal import seal_img_tag
 from app.ui import apply_theme
 
 st.set_page_config(page_title="システム管理 | 収支ワークフローツール", page_icon="📊", layout="wide")
@@ -34,7 +35,13 @@ with tab_users:
     users = session.execute(select(User)).scalars().all()
     for u in users:
         with st.container(border=True):
-            c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
+            c0, c1, c2, c3, c4 = st.columns([1, 2, 2, 2, 2])
+            with c0:
+                if u.seal_svg:
+                    st.markdown(seal_img_tag(u.seal_svg, size=48), unsafe_allow_html=True)
+                    st.caption("印鑑登録済み")
+                else:
+                    st.caption("印鑑: 未登録")
             c1.markdown(f"**{u.username}**")
             c1.caption(u.display_name)
             new_role = c2.selectbox("ロール", options=ROLES, index=ROLES.index(u.role), key=f"role_{u.id}")

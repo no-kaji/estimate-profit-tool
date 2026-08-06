@@ -1,7 +1,9 @@
 import streamlit as st
+from sqlalchemy import select
 
 from app.auth import logout_button, require_login
 from app.db import get_session, init_db
+from app.models import FinancialRecord
 from app.seal import generate_personal_seal_svg, seal_img_tag
 from app.ui import apply_theme
 
@@ -29,5 +31,38 @@ if st.button("個人印鑑を生成 / 再生成"):
     session.commit()
     st.success("個人印鑑を生成しました。")
     st.rerun()
+
+st.divider()
+st.subheader("自分が作成した見積もりの履歴")
+
+my_records = session.execute(
+    select(FinancialRecord)
+    .where(FinancialRecord.created_by_id == user.id, FinancialRecord.deleted_at.is_(None))
+    .order_by(FinancialRecord.updated_at.desc())
+).scalars().all()
+
+badge_map = {"下書き": "⚪ 下書き", "申請中": "🟡 承認申請中", "承認済み": "🟢 承認済み", "却下": "🔴 却下"}
+
+if not my_records:
+    st.info("まだ作成した見積もりがありません。")
+else:
+    for rec in my_records:
+        with st.container(border=True):
+            c1, c2 = st.columns([3, 2])
+            with c1:
+                st.markdown(f"**{rec.project.project_name or '(案件名未設定)'}**({rec.project.client_name})")
+                st.caption(f"{rec.record_type} / 更新日時: {rec.updated_at}")
+            with c2:
+                status_label = badge_map.get(rec.approval_status, rec.approval_status) if rec.record_type == "確定見積" else ""
+                if status_label:
+                    st.write(status_label)
+                if rec.record_type == "確定見積" and rec.approval_status == "却下" and rec.reject_reason:
+                    st.caption(f"却下理由: {rec.reject_reason}")
+                if st.button("開く", key=f"open_myrec_{rec.id}"):
+                    st.session_state["current_project_id"] = rec.project_id
+                    st.session_state["estimate_step"] = "detail"
+                    st.session_state["selected_contract_type_id"] = rec.contract_type_id
+                    st.session_state["editing_record_id"] = rec.id
+                    st.switch_page("pages/02_見積入力.py")
 
 session.close()

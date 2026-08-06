@@ -17,6 +17,7 @@ from app.models import Base
 DB_PATH = os.environ.get("ESTIMATE_TOOL_DB_PATH") or os.path.join(tempfile.gettempdir(), "estimate_tool_v3", "app.db")
 _engine = None
 _SessionLocal: sessionmaker[Session] | None = None
+_schema_checked = False
 
 
 def get_engine():
@@ -54,8 +55,16 @@ def _schema_matches(engine) -> bool:
 
 
 def init_db() -> None:
+    """DB初期化。init_db()はStreamlitの全ページ・全rerunで毎回呼ばれるため、
+    スキーマ整合性チェック(DB作り直しを含みうる重い処理)はプロセス起動後の
+    最初の1回だけ実行する。毎回チェックすると、ログイン直後のrerunで再度
+    作り直しが走りログインセッションが壊れる不具合につながっていた。
+    """
+    global _schema_checked
     engine = get_engine()
     Base.metadata.create_all(engine)
-    if not _schema_matches(engine):
-        Base.metadata.drop_all(engine)
-        Base.metadata.create_all(engine)
+    if not _schema_checked:
+        if not _schema_matches(engine):
+            Base.metadata.drop_all(engine)
+            Base.metadata.create_all(engine)
+        _schema_checked = True

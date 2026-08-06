@@ -235,6 +235,7 @@ class FinancialRecord(Base):
     approved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
     approved_at: Mapped[dt.datetime | None] = mapped_column(default=None)
     reject_reason: Mapped[str | None] = mapped_column(default=None)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
     created_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow)
 
@@ -244,6 +245,7 @@ class FinancialRecord(Base):
     cost_lines: Mapped[list["CostLine"]] = relationship(back_populates="financial_record", cascade="all, delete-orphan")
     requested_by: Mapped["User | None"] = relationship(foreign_keys=[requested_by_id])
     approved_by: Mapped["User | None"] = relationship(foreign_keys=[approved_by_id])
+    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_id])
     weekly_actuals: Mapped[list["WeeklyActual"]] = relationship(back_populates="financial_record", cascade="all, delete-orphan")
 
 

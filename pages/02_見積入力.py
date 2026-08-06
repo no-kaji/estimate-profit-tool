@@ -64,7 +64,12 @@ existing_records = session.execute(
     select(FinancialRecord).where(FinancialRecord.project_id == project.id)
 ).scalars().all()
 
-mode = st.radio("操作", ["新規に見積を作成", "既存レコードを編集"], horizontal=True)
+_preselected_id = st.session_state.get("editing_record_id")
+_preselected_valid = _preselected_id is not None and any(r.id == _preselected_id for r in existing_records)
+mode = st.radio(
+    "操作", ["新規に見積を作成", "既存レコードを編集"], horizontal=True,
+    index=1 if _preselected_valid else 0,
+)
 
 editing_record: FinancialRecord | None = None
 if mode == "既存レコードを編集":
@@ -72,7 +77,11 @@ if mode == "既存レコードを編集":
         st.info("この案件にはまだレコードがありません。「新規に見積を作成」を選んでください。")
         st.stop()
     rec_labels = {r.id: f"{r.record_type} / {r.period_start or '期間未定'}〜{r.period_end or ''}" for r in existing_records}
-    rec_id = st.selectbox("編集するレコード", options=list(rec_labels.keys()), format_func=lambda i: rec_labels[i])
+    rec_ids = list(rec_labels.keys())
+    rec_id = st.selectbox(
+        "編集するレコード", options=rec_ids, format_func=lambda i: rec_labels[i],
+        index=rec_ids.index(_preselected_id) if _preselected_valid else 0,
+    )
     editing_record = session.get(FinancialRecord, rec_id)
     st.session_state["estimate_step"] = "detail"
     st.session_state["selected_contract_type_id"] = editing_record.contract_type_id
@@ -356,7 +365,7 @@ if st.button("保存", type="primary"):
     if editing_record is not None:
         rec = editing_record
     else:
-        rec = FinancialRecord(project_id=project.id)
+        rec = FinancialRecord(project_id=project.id, created_by_id=user.id)
         session.add(rec)
 
     rec.record_type = record_type
@@ -432,6 +441,7 @@ if st.session_state.get("_copy_to_confirmed"):
             product=src.product,
             order_status=src.order_status,
             unit_name=src.unit_name,
+            created_by_id=user.id,
         )
         session.add(new_rec)
         session.flush()

@@ -85,52 +85,66 @@ section[data-testid="stSidebar"] {
 
 /* サイドバーのナビゲーション項目
    - アイコン(線形Material Symbols): ホバーで回転
-   - テキスト: ホバーで拡大(迫るような元気な印象)
-   - 背景: ホバーした項目の上端が波打って盛り上がるように現れる
-   参考: https://b-risk.jp/blog/2021/11/hover-reference/ (テキストの拡大)
+   - テキスト: ホバーで上にUP(迫るような元気な印象)
+   - 文字を囲む背景ボックスは一切表示しない(現在のページであっても囲まない)
+   - ナビゲーションバー右の枠線が、ホバーした項目の高さの位置だけ盛り上がって波打つ
+   参考: https://b-risk.jp/blog/2021/11/hover-reference/ (テキストが迫る)
         https://kekenta-it-blog.com/icon-hover-animations-guide/ (アイコンの回転)
    Streamlitの内部DOM構造は確認できないため、複数のセレクタ候補を併記している。 */
+
+/* Streamlit標準の「現在のページ」を示す背景ボックスも含め、ナビ項目の背景ボックスは
+   常に非表示にする(文字の囲いは不要という指示のため)。 */
 section[data-testid="stSidebarNav"] a,
 div[data-testid="stSidebarNavItems"] a,
 nav[data-testid="stSidebarNav"] a,
-section[data-testid="stSidebar"] li a {
+section[data-testid="stSidebar"] li a,
+section[data-testid="stSidebarNav"] a[aria-current="page"],
+div[data-testid="stSidebarNavItems"] a[aria-current="page"],
+nav[data-testid="stSidebarNav"] a[aria-current="page"],
+section[data-testid="stSidebar"] li a[aria-current="page"] {
     position: relative;
     isolation: isolate;
     overflow: visible !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+section[data-testid="stSidebarNav"] a[aria-current="page"] p,
+div[data-testid="stSidebarNavItems"] a[aria-current="page"] p,
+nav[data-testid="stSidebarNav"] a[aria-current="page"] p {
+    font-weight: 800 !important;
 }
 
-/* 上端が波打つ背景(::beforeで疑似要素として敷き、ホバー時にせり上がらせる) */
-section[data-testid="stSidebarNav"] a::before,
-div[data-testid="stSidebarNavItems"] a::before,
-nav[data-testid="stSidebarNav"] a::before,
-section[data-testid="stSidebar"] li a::before {
+/* サイドバー全体の右端に枠線を用意し、ナビ項目の行の外側(overflow visible)に
+   はみ出す形でバンプ(こぶ)を配置する。ホバー時のみそのバンプが右に膨らみ、
+   「その項目の高さの位置だけ枠線が波打つ」ように見せる。 */
+section[data-testid="stSidebar"] {
+    border-right: 2px solid rgba(106, 95, 211, 0.18);
+}
+section[data-testid="stSidebarNav"] a::after,
+div[data-testid="stSidebarNavItems"] a::after,
+nav[data-testid="stSidebarNav"] a::after,
+section[data-testid="stSidebar"] li a::after {
     content: "";
     position: absolute;
-    inset: 0 4px -4px 4px;
-    z-index: -1;
-    border-radius: 10px;
-    background: var(--accent-soft, #eceafc);
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0,14 C 8,2 17,2 25,14 C 33,26 42,26 50,14 C 58,2 67,2 75,14 C 83,26 92,26 100,14 L100,100 L0,100 Z'/%3E%3C/svg%3E");
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0,14 C 8,2 17,2 25,14 C 33,26 42,26 50,14 C 58,2 67,2 75,14 C 83,26 92,26 100,14 L100,100 L0,100 Z'/%3E%3C/svg%3E");
-    -webkit-mask-size: 100% 100%;
-    mask-size: 100% 100%;
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
+    top: 50%;
+    right: -22px;
+    width: 26px;
+    height: 70%;
+    background: #6a5fd3;
+    border-radius: 50%;
+    transform: translateY(-50%) scaleX(0);
+    transform-origin: left center;
     opacity: 0;
-    transform: translateY(10px) scaleY(0.85);
-    transform-origin: bottom;
-    transition: opacity 0.25s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+    pointer-events: none;
+    z-index: 5;
 }
-section[data-testid="stSidebarNav"] a:hover::before,
-div[data-testid="stSidebarNavItems"] a:hover::before,
-nav[data-testid="stSidebarNav"] a:hover::before,
-section[data-testid="stSidebar"] li a:hover::before,
-section[data-testid="stSidebarNav"] a[aria-current="page"]::before,
-div[data-testid="stSidebarNavItems"] a[aria-current="page"]::before,
-nav[data-testid="stSidebarNav"] a[aria-current="page"]::before,
-section[data-testid="stSidebar"] li a[aria-current="page"]::before {
+section[data-testid="stSidebarNav"] a:hover::after,
+div[data-testid="stSidebarNavItems"] a:hover::after,
+nav[data-testid="stSidebarNav"] a:hover::after,
+section[data-testid="stSidebar"] li a:hover::after {
+    transform: translateY(-50%) scaleX(1);
     opacity: 1;
-    transform: translateY(0) scaleY(1);
 }
 
 /* アイコン: ホバーで回転 */
@@ -139,16 +153,16 @@ div[data-testid="stSidebarNavItems"] a [data-testid^="stIcon"],
 nav[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
 section[data-testid="stSidebar"] li a [data-testid^="stIcon"] {
     display: inline-block;
-    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 0.45s ease;
 }
 section[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
 div[data-testid="stSidebarNavItems"] a:hover [data-testid^="stIcon"],
 nav[data-testid="stSidebarNav"] a:hover [data-testid^="stIcon"],
 section[data-testid="stSidebar"] li a:hover [data-testid^="stIcon"] {
-    transform: rotate(18deg) scale(1.15);
+    transform: rotate(360deg);
 }
 
-/* テキスト: ホバーで拡大(迫る) */
+/* テキスト: ホバーで上にUP+拡大(迫る) */
 section[data-testid="stSidebarNav"] a p,
 div[data-testid="stSidebarNavItems"] a p,
 nav[data-testid="stSidebarNav"] a p,
@@ -161,14 +175,14 @@ section[data-testid="stSidebarNav"] a:hover p,
 div[data-testid="stSidebarNavItems"] a:hover p,
 nav[data-testid="stSidebarNav"] a:hover p,
 section[data-testid="stSidebar"] li a:hover span:last-child {
-    transform: scale(1.08);
+    transform: translateY(-3px) scale(1.1);
 }
 
 @media (prefers-reduced-motion: reduce) {
-    section[data-testid="stSidebarNav"] a::before,
-    div[data-testid="stSidebarNavItems"] a::before,
-    nav[data-testid="stSidebarNav"] a::before,
-    section[data-testid="stSidebar"] li a::before,
+    section[data-testid="stSidebarNav"] a::after,
+    div[data-testid="stSidebarNavItems"] a::after,
+    nav[data-testid="stSidebarNav"] a::after,
+    section[data-testid="stSidebar"] li a::after,
     section[data-testid="stSidebarNav"] a [data-testid^="stIcon"],
     div[data-testid="stSidebarNavItems"] a [data-testid^="stIcon"],
     nav[data-testid="stSidebarNav"] a [data-testid^="stIcon"],

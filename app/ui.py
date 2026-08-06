@@ -131,14 +131,14 @@ section[data-testid="stSidebarNav"] li,
 div[data-testid="stSidebarNavItems"] li,
 nav[data-testid="stSidebarNav"] li,
 section[data-testid="stSidebar"] li {
-    margin-bottom: 6px;
+    margin-bottom: 2px;
 }
 section[data-testid="stSidebarNav"] a,
 div[data-testid="stSidebarNavItems"] a,
 nav[data-testid="stSidebarNav"] a,
 section[data-testid="stSidebar"] li a {
-    padding-top: 10px !important;
-    padding-bottom: 10px !important;
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
 }
 
 /* アイコンとテキストをそれぞれ別々に拡大すると、間隔が詰まって重なって見えるため、

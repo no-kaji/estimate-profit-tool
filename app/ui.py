@@ -77,6 +77,30 @@ section[data-testid="stSidebar"] {
     border-radius: 0 20px 20px 0;
 }
 
+/* サイドバーのナビゲーション項目: ホバーするとアイコン部分が動く
+   (Streamlitのst.navigationが生成するDOM構造の詳細は取得できないため、
+   複数のセレクタ候補を併記して当たるようにしている。効果が見えない場合は
+   実際のDOM構造を確認して調整が必要)。 */
+section[data-testid="stSidebarNav"] a,
+div[data-testid="stSidebarNavItems"] a,
+nav[data-testid="stSidebarNav"] a,
+section[data-testid="stSidebar"] li a {
+    transition: background-color 0.15s ease;
+}
+section[data-testid="stSidebarNav"] a span:first-child,
+div[data-testid="stSidebarNavItems"] a span:first-child,
+nav[data-testid="stSidebarNav"] a span:first-child,
+section[data-testid="stSidebar"] li a span:first-child {
+    display: inline-block;
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+section[data-testid="stSidebarNav"] a:hover span:first-child,
+div[data-testid="stSidebarNavItems"] a:hover span:first-child,
+nav[data-testid="stSidebarNav"] a:hover span:first-child,
+section[data-testid="stSidebar"] li a:hover span:first-child {
+    transform: scale(1.3) rotate(-10deg);
+}
+
 /* 見出しのアクセントカラー */
 h1, h2, h3 {
     color: #362f66;

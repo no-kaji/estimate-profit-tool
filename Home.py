@@ -21,7 +21,6 @@ pages = [
     st.Page("app_pages/00_ホーム.py", title="ホーム", icon="🏠", default=True),
     st.Page("app_pages/01_案件一覧.py", title="案件一覧", icon="📁"),
     st.Page("app_pages/02_見積入力.py", title="見積入力", icon="📝"),
-    st.Page("app_pages/05_マスタ管理.py", title="マスタ管理", icon="🗂️"),
     st.Page("app_pages/10_収支管理.py", title="収支管理", icon="💰"),
     st.Page("app_pages/11_経営ボード明細出力.py", title="経営ボード明細出力", icon="📈"),
 ]
@@ -32,6 +31,7 @@ if user.can_manage_company_seal:
 if user.can_approve:
     pages.append(st.Page("app_pages/09_承認.py", title="承認", icon="✅"))
 if user.can_manage_users:
+    pages.append(st.Page("app_pages/05_マスタ管理.py", title="マスタ管理", icon="🗂️"))
     pages.append(st.Page("app_pages/06_システム管理.py", title="システム管理", icon="⚙️"))
 
 session.close()

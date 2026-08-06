@@ -21,6 +21,9 @@ apply_theme()
 logout_button()
 
 st.title("マスタ管理")
+if not user.can_manage_users:
+    st.error("この画面はシステム管理者のみ利用できます。")
+    st.stop()
 
 tab_contract, tab_billing, tab_policy, tab_insurance = st.tabs(
     ["契約形式・計算パターン", "請求項目", "キャンセルポリシー", "法定福利費率"]

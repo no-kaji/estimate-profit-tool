@@ -291,15 +291,14 @@ class LineItem(Base):
     billing_admin_fee_monthly: Mapped[float] = mapped_column(default=0.0)
     billing_allowance_monthly: Mapped[float] = mapped_column(default=0.0)
 
-    payment_pricing_pattern_id: Mapped[int | None] = mapped_column(ForeignKey("pricing_patterns.id"), default=None)
-    payment_rate: Mapped[float] = mapped_column(default=0.0)
-    payment_qty1: Mapped[float] = mapped_column(default=1.0)
-    payment_qty2: Mapped[float] = mapped_column(default=1.0)
-    payment_qty3: Mapped[float] = mapped_column(default=1.0)
+    # 2026-08-06修正: 人件費の原価は請求側のマスタ(契約形式・計算パターン)によらず、
+    # 常に「時給×1日の時間数×日数」の固定式で計算する(指摘を受けて汎用パターン式から変更)。
+    payment_hourly_rate: Mapped[float] = mapped_column(default=0.0)
+    payment_days: Mapped[float] = mapped_column(default=0.0)
     payment_commute_monthly: Mapped[float] = mapped_column(default=0.0)
     payment_allowance_monthly: Mapped[float] = mapped_column(default=0.0)
 
-    standard_hours_daily: Mapped[float] = mapped_column(default=8.0)
+    standard_hours_daily: Mapped[float] = mapped_column(default=8.0)  # 1日の時間数
     standard_hours_monthly: Mapped[float] = mapped_column(default=0.0)
     overtime_hours_monthly: Mapped[float] = mapped_column(default=0.0)
     night_overtime_hours_monthly: Mapped[float] = mapped_column(default=0.0)
@@ -307,7 +306,6 @@ class LineItem(Base):
 
     financial_record: Mapped["FinancialRecord"] = relationship(back_populates="line_items")
     billing_item: Mapped["BillingItemMaster | None"] = relationship()
-    payment_pricing_pattern: Mapped["PricingPattern | None"] = relationship()
 
     @property
     def billing_item_display(self) -> str:

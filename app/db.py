@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import tempfile
 
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import Base
@@ -12,8 +12,6 @@ from app.models import Base
 # 書き込み禁止のため、そこにSQLiteファイルを作成できない。OS標準の一時ディレクトリ配下に
 # 保存する(=書き込みは確実に通るが、再デプロイ・再起動でデータは消える/永続化されない)。
 # 本番運用では永続ボリュームまたは外部DB(例: Postgres)への切り替えが必要(既知の制約)。
-# フォルダ名の末尾(v3など)はDBの作り直しトリガーを兼ねる。上げるとまっさらなDBになる
-# (2026-08-05: 管理者アカウントのID/パスワードを初期化するため v3 に更新)。
 DB_PATH = os.environ.get("ESTIMATE_TOOL_DB_PATH") or os.path.join(tempfile.gettempdir(), "estimate_tool_v3", "app.db")
 _engine = None
 _SessionLocal: sessionmaker[Session] | None = None
@@ -35,36 +33,36 @@ def get_session() -> Session:
     return _SessionLocal()
 
 
-def _schema_matches(engine) -> bool:
-    """既存DBのテーブル/カラムが、現在のモデル定義と一致しているか確認する。
+def _add_missing_columns(engine) -> None:
+    """モデルにあってDBに無い列を、既存データを消さずにALTER TABLEで追加する。
 
-    このアプリには本格的なマイグレーション機構がない(既知の制約)。
-    Streamlit Cloud上のDBはどのみち一時領域で永続化されないため、
-    スキーマ不一致を検知したら丸ごと作り直す方式にする。
+    2026-08-06: 以前はスキーマ不一致を検知したらテーブルを丸ごと作り直していたが、
+    そのたびに登録済みユーザー等のデータが消えてしまい「登録情報を維持してほしい」との
+    指摘を受けた。列の追加はSQLiteのALTER TABLE ADD COLUMNで既存データを保持したまま行える
+    ため、この方式に変更する(列の削除・型変更には対応しない。使われなくなった列は
+    残ったままになるが実害はない)。
     """
     inspector = inspect(engine)
     existing_tables = set(inspector.get_table_names())
-    for table in Base.metadata.sorted_tables:
-        if table.name not in existing_tables:
-            return False
-        existing_cols = {c["name"] for c in inspector.get_columns(table.name)}
-        expected_cols = {c.name for c in table.columns}
-        if not expected_cols.issubset(existing_cols):
-            return False
-    return True
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                continue
+            existing_cols = {c["name"] for c in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing_cols:
+                    continue
+                col_type = column.type.compile(dialect=engine.dialect)
+                conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {col_type}'))
 
 
 def init_db() -> None:
     """DB初期化。init_db()はStreamlitの全ページ・全rerunで毎回呼ばれるため、
-    スキーマ整合性チェック(DB作り直しを含みうる重い処理)はプロセス起動後の
-    最初の1回だけ実行する。毎回チェックすると、ログイン直後のrerunで再度
-    作り直しが走りログインセッションが壊れる不具合につながっていた。
+    スキーマ整合性チェックはプロセス起動後の最初の1回だけ実行する。
     """
     global _schema_checked
     engine = get_engine()
-    Base.metadata.create_all(engine)
+    Base.metadata.create_all(engine)  # まだ存在しないテーブルを新規作成(既存データには影響しない)
     if not _schema_checked:
-        if not _schema_matches(engine):
-            Base.metadata.drop_all(engine)
-            Base.metadata.create_all(engine)
+        _add_missing_columns(engine)
         _schema_checked = True

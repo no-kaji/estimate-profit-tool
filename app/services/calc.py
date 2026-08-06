@@ -27,18 +27,14 @@ class LineItemInput:
     billing_allowance_monthly: float = 0.0
     headcount: int = 1
 
-    payment_rate: float = 0.0
-    payment_qty1: float | None = 1.0
-    payment_qty2: float | None = 1.0
-    payment_qty3: float | None = 1.0
+    # 2026-08-06修正: 人件費の原価は、請求側の契約形式・計算パターンによらず常に
+    # 「時給 × 1日の時間数 × 日数」の固定式で計算する(指摘を受け、汎用パターン式から変更)。
+    payment_hourly_rate: float = 0.0
+    hours_per_day: float = 8.0
+    payment_days: float = 0.0
     payment_commute_monthly: float = 0.0
     payment_allowance_monthly: float = 0.0
 
-    # 残業等は、支払パターンが「時給」相当(時間×日数×月数)の場合のみ
-    # payment_rate を時給とみなして計算する。それ以外のパターン(人日/人月/式)では
-    # 時給換算の根拠がないため、残業関連の追加コストは0として扱う
-    # (雛形の元の数式は未取得のため、QAで実データと突き合わせて要調整)。
-    is_hourly_pattern: bool = False
     overtime_hours_monthly: float = 0.0
     night_overtime_hours_monthly: float = 0.0
     unbilled_leave_hours_monthly: float = 0.0
@@ -67,9 +63,9 @@ def calc_line_item(item: LineItemInput, insurance_total_rate: float) -> LineItem
         + item.billing_allowance_monthly
     ) * item.headcount
 
-    payment_base = pattern_amount(item.payment_rate, item.payment_qty1, item.payment_qty2, item.payment_qty3) * item.headcount
+    payment_base = item.payment_hourly_rate * item.hours_per_day * item.payment_days * item.headcount
 
-    hourly_rate = item.payment_rate if item.is_hourly_pattern else 0.0
+    hourly_rate = item.payment_hourly_rate
     overtime_pay = hourly_rate * item.overtime_hours_monthly * item.overtime_multiplier * item.headcount
     night_overtime_pay = hourly_rate * item.night_overtime_hours_monthly * item.night_overtime_multiplier * item.headcount
     unbilled_leave_pay = hourly_rate * item.unbilled_leave_hours_monthly * item.headcount

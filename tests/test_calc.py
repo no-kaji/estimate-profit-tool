@@ -29,36 +29,34 @@ def test_fiscal_year_of_april_boundary():
     assert fiscal_year_of(dt.date(2026, 3, 31)) == 2025
 
 
-def test_calc_line_item_outsource_pattern():
+def test_calc_line_item_hourly_cost_formula():
+    # 2026-08-06: 人件費の原価は契約形式によらず常に「時給×1日の時間数×日数」の固定式
     item = LineItemInput(
         billing_daily_rate=16000,
         billing_days=21,
         headcount=1,
-        payment_rate=14000,
-        payment_qty1=21,
-        payment_qty2=1,
-        payment_qty3=1,
-        is_hourly_pattern=False,
+        payment_hourly_rate=1750,
+        hours_per_day=8,
+        payment_days=21,
     )
     result = calc_line_item(item, insurance_total_rate=0.157)
+    expected_base = 1750 * 8 * 21
     assert result.sales == 336000
-    assert result.payment_base == 294000
+    assert result.payment_base == expected_base
     assert result.overtime_pay == 0
-    assert round(result.statutory_insurance, 2) == round(294000 * 0.157, 2)
-    assert round(result.cost_total, 2) == round(294000 * 1.157, 2)
-    assert round(result.profit, 2) == round(336000 - 294000 * 1.157, 2)
+    assert round(result.statutory_insurance, 2) == round(expected_base * 0.157, 2)
+    assert round(result.cost_total, 2) == round(expected_base * 1.157, 2)
+    assert round(result.profit, 2) == round(336000 - expected_base * 1.157, 2)
 
 
-def test_calc_line_item_hourly_pattern_with_overtime():
+def test_calc_line_item_with_overtime():
     item = LineItemInput(
         billing_daily_rate=17440,
         billing_days=23,
         headcount=1,
-        payment_rate=1400,
-        payment_qty1=8,
-        payment_qty2=23,
-        payment_qty3=1,
-        is_hourly_pattern=True,
+        payment_hourly_rate=1400,
+        hours_per_day=8,
+        payment_days=23,
         overtime_hours_monthly=2,
     )
     result = calc_line_item(item, insurance_total_rate=0.0)
@@ -69,18 +67,34 @@ def test_calc_line_item_hourly_pattern_with_overtime():
     assert result.cost_total == expected_base + expected_overtime
 
 
+def test_calc_line_item_headcount_multiplies_cost_and_sales():
+    item = LineItemInput(
+        billing_daily_rate=10000,
+        billing_days=5,
+        headcount=3,
+        payment_hourly_rate=1000,
+        hours_per_day=8,
+        payment_days=5,
+    )
+    result = calc_line_item(item, insurance_total_rate=0.0)
+    assert result.sales == 10000 * 5 * 3
+    assert result.payment_base == 1000 * 8 * 5 * 3
+
+
 def test_calc_cost_line_amount():
     item = CostLineInput(rate=15000, qty1=None, qty2=None, qty3=None)
     assert calc_cost_line_amount(item) == 15000
 
 
-def test_calc_financial_record_summary_pass_through_cost_lines():
+def test_calc_financial_record_summary_separates_billing_and_cost():
     line_result = calc_line_item(
-        LineItemInput(billing_daily_rate=10000, billing_days=10, payment_rate=8000, payment_qty1=10),
+        LineItemInput(billing_daily_rate=10000, billing_days=10, payment_hourly_rate=800, hours_per_day=8, payment_days=10),
         insurance_total_rate=0.1,
     )
-    summary = calc_financial_record_summary([line_result], cost_line_amounts=[50000], sga_cost=1000)
+    summary = calc_financial_record_summary(
+        [line_result], cost_line_billing_amounts=[50000], cost_line_cost_amounts=[30000], sga_cost=1000
+    )
     assert summary.sales == line_result.sales + 50000
-    assert summary.cost == line_result.cost_total + 50000
+    assert summary.cost == line_result.cost_total + 30000
     assert round(summary.profit, 2) == round(summary.sales - summary.cost, 2)
     assert round(summary.operating_profit, 2) == round(summary.profit - 1000, 2)

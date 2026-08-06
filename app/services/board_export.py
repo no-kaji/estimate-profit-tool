@@ -50,18 +50,17 @@ def _record_sales_cost(session: Session, record: FinancialRecord, insurance_rate
     total_cost = 0.0
     headcount = 0
     for li in line_items:
-        pattern = li.payment_pricing_pattern
-        is_hourly = pattern is not None and pattern.name == "時間×日数×月数"
         result = calc_line_item(
             LineItemInput(
                 billing_daily_rate=li.billing_daily_rate,
                 billing_days=li.billing_days,
                 headcount=li.headcount,
-                payment_rate=li.payment_rate,
-                payment_qty1=li.payment_qty1 if pattern and pattern.qty1_label else None,
-                payment_qty2=li.payment_qty2 if pattern and pattern.qty2_label else None,
-                payment_qty3=li.payment_qty3 if pattern and pattern.qty3_label else None,
-                is_hourly_pattern=is_hourly,
+                payment_hourly_rate=li.payment_hourly_rate,
+                hours_per_day=li.standard_hours_daily,
+                payment_days=li.payment_days,
+                overtime_hours_monthly=li.overtime_hours_monthly,
+                night_overtime_hours_monthly=li.night_overtime_hours_monthly,
+                unbilled_leave_hours_monthly=li.unbilled_leave_hours_monthly,
             ),
             insurance_rate,
         )

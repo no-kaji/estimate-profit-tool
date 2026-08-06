@@ -57,6 +57,9 @@ selected_id = st.selectbox(
 st.session_state["current_project_id"] = selected_id
 project = session.get(Project, selected_id)
 
+if st.session_state.pop("_saved_flash", False):
+    st.success("保存しました。")
+
 # ---------------------------------------------------------------
 # 新規作成 or 既存レコードの編集
 # ---------------------------------------------------------------
@@ -152,8 +155,12 @@ if record_type == "概算見積" and editing_record is not None:
 # 承認申請(確定見積の見積書発行フロー)
 # マネージャー/システム管理者が自ら作成した場合: その場で自己承認(社判も自分で配置)
 # ユーザーが作成した場合: 個人印鑑を押し、所属拠点のマネージャーを選んで承認を申請
+#
+# 保存前(editing_record is None)は申請できないため、その旨を案内する。
 # ---------------------------------------------------------------
-if record_type == "確定見積" and editing_record is not None:
+if record_type == "確定見積" and editing_record is None:
+    st.info("この確定見積を保存すると、承認フロー(個人印鑑での申請・マネージャー承認)に進めるようになります。まずは下の内容を入力して「保存」してください。")
+elif record_type == "確定見積" and editing_record is not None:
     status = editing_record.approval_status
     badge_map = {"下書き": "⚪ 下書き", "申請中": "🟡 承認申請中", "承認済み": "🟢 承認済み(社判配置済み)", "却下": "🔴 却下"}
     st.info(f"承認ステータス: {badge_map.get(status, status)}")
@@ -236,7 +243,8 @@ if record_type == "確定見積" and editing_record is not None:
 st.subheader("明細行(人件費)")
 st.caption(
     "個人名ではなく「請求科目」を単位として入力します。列名の【請求】はお客様への請求額、"
-    "【原価】は実際にかかる費用です。社保加入区分は社内用で、見積書には表示されません。"
+    "【原価】は実際にかかる費用です。原価は契約形式によらず「時給×1日の時間数×日数」で"
+    "計算されます。社保加入区分は社内用で、見積書には表示されません。"
 )
 
 billing_items = session.execute(select(BillingItemMaster)).scalars().all()
@@ -250,13 +258,12 @@ with st.expander("＋ 請求科目マスタに新しい項目を追加"):
             session.commit()
             st.rerun()
 
-patterns_for_contract = [p.name for p in contract_type.patterns]
 all_patterns = [p.name for p in session.execute(select(PricingPattern)).scalars().all()]
 
 LINE_ITEM_COLUMNS = [
     "請求科目", "社保加入区分(社内用)", "人数",
     "【請求】日額単価", "【請求】日数",
-    "【原価】計算パターン", "【原価】単価", "【原価】数量1", "【原価】数量2", "【原価】数量3",
+    "【原価】時給", "【原価】1日の時間数", "【原価】日数",
 ]
 
 if "line_items_df" not in st.session_state or st.session_state.get("_line_items_loaded_for") != (project.id, editing_record.id if editing_record else None):
@@ -268,11 +275,9 @@ if "line_items_df" not in st.session_state or st.session_state.get("_line_items_
                 "人数": li.headcount,
                 "【請求】日額単価": li.billing_daily_rate,
                 "【請求】日数": li.billing_days,
-                "【原価】計算パターン": (li.payment_pricing_pattern.name if li.payment_pricing_pattern else patterns_for_contract[0]),
-                "【原価】単価": li.payment_rate,
-                "【原価】数量1": li.payment_qty1,
-                "【原価】数量2": li.payment_qty2,
-                "【原価】数量3": li.payment_qty3,
+                "【原価】時給": li.payment_hourly_rate,
+                "【原価】1日の時間数": li.standard_hours_daily,
+                "【原価】日数": li.payment_days,
             }
             for li in editing_record.line_items
         ]
@@ -291,11 +296,9 @@ line_items_df = st.data_editor(
         "人数": st.column_config.NumberColumn(min_value=0, step=1),
         "【請求】日額単価": st.column_config.NumberColumn(format="¥%d", min_value=0, step=100),
         "【請求】日数": st.column_config.NumberColumn(min_value=0, step=1),
-        "【原価】計算パターン": st.column_config.SelectboxColumn(options=patterns_for_contract),
-        "【原価】単価": st.column_config.NumberColumn(format="¥%d", min_value=0, step=100),
-        "【原価】数量1": st.column_config.NumberColumn(min_value=0, step=1),
-        "【原価】数量2": st.column_config.NumberColumn(min_value=0, step=1),
-        "【原価】数量3": st.column_config.NumberColumn(min_value=0, step=1),
+        "【原価】時給": st.column_config.NumberColumn(format="¥%d", min_value=0, step=50),
+        "【原価】1日の時間数": st.column_config.NumberColumn(min_value=0.0, step=0.5),
+        "【原価】日数": st.column_config.NumberColumn(min_value=0, step=1),
     },
     key="line_items_editor",
 )
@@ -375,23 +378,24 @@ if insurance_master is None:
 pattern_by_name = {p.name: p for p in session.execute(select(PricingPattern)).scalars().all()}
 
 line_results = []
+line_preview_rows = []
 for _, row in line_items_df.iterrows():
-    pattern = pattern_by_name.get(row.get("【原価】計算パターン"))
-    is_hourly = pattern is not None and pattern.name == "時間×日数×月数"
     item_input = LineItemInput(
         billing_daily_rate=float(row.get("【請求】日額単価") or 0),
         billing_days=float(row.get("【請求】日数") or 0),
         headcount=int(row.get("人数") or 1),
-        payment_rate=float(row.get("【原価】単価") or 0),
-        payment_qty1=float(row.get("【原価】数量1") or 1) if pattern and pattern.qty1_label else None,
-        payment_qty2=float(row.get("【原価】数量2") or 1) if pattern and pattern.qty2_label else None,
-        payment_qty3=float(row.get("【原価】数量3") or 1) if pattern and pattern.qty3_label else None,
-        is_hourly_pattern=is_hourly,
+        payment_hourly_rate=float(row.get("【原価】時給") or 0),
+        hours_per_day=float(row.get("【原価】1日の時間数") or 0),
+        payment_days=float(row.get("【原価】日数") or 0),
     )
-    line_results.append(calc_line_item(item_input, insurance_rate))
+    result = calc_line_item(item_input, insurance_rate)
+    line_results.append(result)
+    if row.get("請求科目"):
+        line_preview_rows.append({"項目": row.get("請求科目"), "数量": f"{int(row.get('人数') or 1)}名 × {row.get('【請求】日数') or 0}日", "金額": result.sales})
 
 cost_billing_amounts = []
 cost_cost_amounts = []
+cost_preview_rows = []
 for _, row in cost_lines_df.iterrows():
     billing_pattern = pattern_by_name.get(row.get("【請求】計算パターン"))
     billing_input = CostLineInput(
@@ -400,7 +404,10 @@ for _, row in cost_lines_df.iterrows():
         qty2=float(row.get("【請求】数量2") or 1) if billing_pattern and billing_pattern.qty2_label else None,
         qty3=float(row.get("【請求】数量3") or 1) if billing_pattern and billing_pattern.qty3_label else None,
     )
-    cost_billing_amounts.append(calc_cost_line_amount(billing_input))
+    billing_amount = calc_cost_line_amount(billing_input)
+    cost_billing_amounts.append(billing_amount)
+    if row.get("費目"):
+        cost_preview_rows.append({"項目": row.get("費目"), "数量": "—", "金額": billing_amount})
 
     cost_pattern = pattern_by_name.get(row.get("【原価】計算パターン"))
     cost_input = CostLineInput(
@@ -429,7 +436,7 @@ st.caption(
     "システム管理者にご相談ください)"
 )
 
-with st.expander("経営ボード明細用の追加項目(セグメント・商材・常勤/CA 等)"):
+with st.expander("経営ボード明細用の追加項目(セグメント・商材・常勤/CA)"):
     d1, d2, d3 = st.columns(3)
     segment = d1.text_input("セグメント", value=editing_record.segment if editing_record else "")
     product = d2.text_input("商材", value=editing_record.product if editing_record else "")
@@ -437,9 +444,21 @@ with st.expander("経営ボード明細用の追加項目(セグメント・商�
         "常勤・CA", options=["常勤", "CA"],
         index=(["常勤", "CA"].index(editing_record.employment_type) if editing_record and editing_record.employment_type in ("常勤", "CA") else 0),
     )
-    d4, d5 = st.columns(2)
-    order_status = d4.text_input("受注状況", value=editing_record.order_status if editing_record else "")
-    unit_name = d5.text_input("ユニット名称", value=editing_record.unit_name if editing_record else "")
+    st.caption("受注状況・ユニット名称は現在この画面では入力しません(不要とのご要望のため)。")
+
+# ---------------------------------------------------------------
+# 見積書プレビュー(顧客提出イメージ、原価・社内用情報は含まない)
+# ---------------------------------------------------------------
+st.subheader("見積書プレビュー")
+st.caption("お客様に提出する内容のイメージです。原価・契約形式・計算パターンなど社内用の情報は含みません。")
+preview_rows = line_preview_rows + cost_preview_rows
+if not preview_rows:
+    st.info("明細行または経費行を入力するとプレビューが表示されます。")
+else:
+    preview_df = pd.DataFrame(preview_rows)
+    preview_df["金額"] = preview_df["金額"].map(lambda v: f"¥{v:,.0f}")
+    st.dataframe(preview_df, use_container_width=True, hide_index=True)
+    st.markdown(f"**合計: ¥{summary.sales:,.0f}**")
 
 # ---------------------------------------------------------------
 # 保存
@@ -460,8 +479,6 @@ if st.button("保存", type="primary"):
     rec.segment = segment
     rec.product = product
     rec.employment_type = employment_type
-    rec.order_status = order_status
-    rec.unit_name = unit_name
     session.flush()
 
     session.query(LineItem).filter(LineItem.financial_record_id == rec.id).delete()
@@ -471,7 +488,6 @@ if st.button("保存", type="primary"):
     for _, row in line_items_df.iterrows():
         if not row.get("請求科目"):
             continue
-        pattern = pattern_by_name.get(row.get("【原価】計算パターン"))
         billing_item = billing_item_by_name.get(row.get("請求科目"))
         session.add(
             LineItem(
@@ -482,11 +498,9 @@ if st.button("保存", type="primary"):
                 headcount=int(row.get("人数") or 1),
                 billing_daily_rate=float(row.get("【請求】日額単価") or 0),
                 billing_days=float(row.get("【請求】日数") or 0),
-                payment_pricing_pattern_id=pattern.id if pattern else None,
-                payment_rate=float(row.get("【原価】単価") or 0),
-                payment_qty1=float(row.get("【原価】数量1") or 1),
-                payment_qty2=float(row.get("【原価】数量2") or 1),
-                payment_qty3=float(row.get("【原価】数量3") or 1),
+                payment_hourly_rate=float(row.get("【原価】時給") or 0),
+                standard_hours_daily=float(row.get("【原価】1日の時間数") or 0),
+                payment_days=float(row.get("【原価】日数") or 0),
             )
         )
     for _, row in cost_lines_df.iterrows():
@@ -512,8 +526,9 @@ if st.button("保存", type="primary"):
             )
         )
     session.commit()
-    st.success("保存しました。")
     st.session_state["editing_record_id"] = rec.id
+    st.session_state["_saved_flash"] = True
+    st.rerun()
 
 # 概算見積 -> 確定見積のコピー実行(ボタン押下はレコード再読込前に検知しておく)
 if st.session_state.get("_copy_to_confirmed"):
@@ -546,11 +561,9 @@ if st.session_state.get("_copy_to_confirmed"):
                     headcount=li.headcount,
                     billing_daily_rate=li.billing_daily_rate,
                     billing_days=li.billing_days,
-                    payment_pricing_pattern_id=li.payment_pricing_pattern_id,
-                    payment_rate=li.payment_rate,
-                    payment_qty1=li.payment_qty1,
-                    payment_qty2=li.payment_qty2,
-                    payment_qty3=li.payment_qty3,
+                    payment_hourly_rate=li.payment_hourly_rate,
+                    standard_hours_daily=li.standard_hours_daily,
+                    payment_days=li.payment_days,
                 )
             )
         for cl in src.cost_lines:

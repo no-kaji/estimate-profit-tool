@@ -114,14 +114,12 @@ nav[data-testid="stSidebarNav"] a[aria-current="page"] p {
     font-weight: 800 !important;
 }
 
-/* サイドバー(ナビゲーション場)の右の枠線は常時は細い直線。
-   ホバーした項目の高さの位置だけ、その枠線自体が右に膨れ上がる
-   (枠線と地続きの丸みとして生えさせることで、独立した図形ではなく
-   「枠が動いている」ように見せる)。全体が揺れる演出ではなく、
-   あくまでホバーした一か所だけが膨らむ。 */
+/* サイドバーの右の境界線そのものを、新しい飾りを足すのではなく各ナビ項目が
+   分担して描画する(既定状態では2pxの直線がつながって見える=これが境界線)。
+   ホバーした項目の分だけ、その境界線自体が右へ膨らむ形に変形する。
+   別要素を重ねて「線を足す」演出ではなく、境界線自体が動く実装。 */
 section[data-testid="stSidebar"] {
     position: relative;
-    border-right: 2px solid rgba(106, 95, 211, 0.3);
 }
 section[data-testid="stSidebarNav"] a::after,
 div[data-testid="stSidebarNavItems"] a::after,
@@ -129,15 +127,13 @@ nav[data-testid="stSidebarNav"] a::after,
 section[data-testid="stSidebar"] li a::after {
     content: "";
     position: absolute;
-    top: 50%;
+    top: -10px;
+    bottom: -10px;
     right: -2px;
-    width: 20px;
-    height: 60%;
+    width: 2px;
     background: #6a5fd3;
-    border-radius: 50%;
-    transform: translateY(-50%) scaleX(0);
-    transform-origin: left center;
-    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    border-radius: 2px;
+    transition: width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), border-radius 0.3s ease;
     pointer-events: none;
     z-index: 5;
 }
@@ -145,7 +141,11 @@ section[data-testid="stSidebarNav"] a:hover::after,
 div[data-testid="stSidebarNavItems"] a:hover::after,
 nav[data-testid="stSidebarNav"] a:hover::after,
 section[data-testid="stSidebar"] li a:hover::after {
-    transform: translateY(-50%) scaleX(1);
+    width: 16px;
+    border-top-left-radius: 50% 40%;
+    border-bottom-left-radius: 50% 40%;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
 }
 
 /* アイコン: ホバーで立体的な影を伴って浮き上がるシャドウ効果 */

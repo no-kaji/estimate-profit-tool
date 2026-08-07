@@ -30,6 +30,18 @@ div[data-testid="stFormSubmitButton"] button[kind="primary"] {
     border: none !important;
 }
 
+/* アイコンは基本的に単色(モノクロ)のライン系で統一し、色付きの背景の上に
+   乗る場合(primaryボタンなど)は白抜きにして視認性を確保する。 */
+div[data-testid="stButton"] button[kind="primary"] [data-testid^="stIcon"],
+div[data-testid="stFormSubmitButton"] button[kind="primary"] [data-testid^="stIcon"],
+div[data-testid="stDownloadButton"] button[kind="primary"] [data-testid^="stIcon"],
+div[data-testid="stButton"] button[kind="primary"] svg,
+div[data-testid="stFormSubmitButton"] button[kind="primary"] svg,
+div[data-testid="stDownloadButton"] button[kind="primary"] svg {
+    color: #ffffff !important;
+    fill: #ffffff !important;
+}
+
 /* 入力欄・セレクトボックス */
 div[data-testid="stTextInput"] input,
 div[data-testid="stNumberInput"] input,
@@ -42,19 +54,25 @@ div[data-baseweb="input"] {
 /* カード・コンテナ・エキスパンダー
    角丸が実際の枠線(details/summary等の内側要素)ではなく外側の透明なラッパーにしか
    掛かっておらず、四隅が欠けて見える不具合があったため、実際に背景・枠線を描画している
-   要素(details, summary, 直下のdiv)にも明示的にborder-radius+overflow:hiddenを適用する。 */
+   要素(details, summary, 直下のdiv)にも明示的にborder-radius+overflow:hiddenを適用する。
+   ただしst.form(stForm)はoverflow:hiddenにすると、フォーム内側の要素(特に下端の
+   ボタン)がカードの角丸に隠れて欠けて見えることがあるため、overflow:hiddenは付けない。 */
 div[data-testid="stVerticalBlockBorderWrapper"],
-div[data-testid="stExpander"],
-div[data-testid="stForm"] {
+div[data-testid="stExpander"] {
     border-radius: 18px !important;
     overflow: hidden;
 }
+div[data-testid="stForm"] {
+    border-radius: 18px !important;
+}
 div[data-testid="stVerticalBlockBorderWrapper"] > div,
 div[data-testid="stExpander"] details,
-div[data-testid="stExpander"] > div,
-div[data-testid="stForm"] > div {
+div[data-testid="stExpander"] > div {
     border-radius: 18px !important;
     overflow: hidden;
+}
+div[data-testid="stForm"] > div {
+    border-radius: 18px !important;
 }
 div[data-testid="stExpander"] summary {
     border-radius: 18px 18px 0 0 !important;

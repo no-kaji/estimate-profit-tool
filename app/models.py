@@ -113,21 +113,41 @@ class ProductMaster(Base):
 
 
 class HeadquartersMaster(Base):
-    """組織属性: 統括部門名称マスタ。ユーザーの所属割り当てに使う。"""
+    """組織属性: 統括部門名称マスタ。ユーザーの所属割り当てに使う。
+
+    統廃合・組織変更で部門が統合されることがあるため、行自体は削除せず、
+    `active=False`にして`merged_into_id`で統合先を指す(履歴として残す)運用にする。
+    なお確定見積・概算見積(FinancialRecord)側は所属部門名を作成時点の文字列として
+    そのまま保持しているため、統合・名称変更を行っても過去の見積の表示内容は変わらない。
+    """
 
     __tablename__ = "headquarters_masters"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(unique=True)
+    active: Mapped[bool] = mapped_column(default=True)
+    merged_into_id: Mapped[int | None] = mapped_column(ForeignKey("headquarters_masters.id"), default=None)
+    merged_at: Mapped[dt.datetime | None] = mapped_column(default=None)
+
+    merged_into: Mapped["HeadquartersMaster | None"] = relationship(remote_side=[id])
 
 
 class BranchMaster(Base):
-    """組織属性: 拠点名称マスタ(=経営ボード明細の「部門名称」として使う)。ユーザーの所属割り当てに使う。"""
+    """組織属性: 拠点名称マスタ(=経営ボード明細の「部門名称」として使う)。ユーザーの所属割り当てに使う。
+
+    統括部門と同様、統廃合時は行を削除せず`active=False`+`merged_into_id`で
+    統合先を記録する(過去の見積の表示内容は文字列保持のため影響を受けない)。
+    """
 
     __tablename__ = "branch_masters"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(unique=True)
+    active: Mapped[bool] = mapped_column(default=True)
+    merged_into_id: Mapped[int | None] = mapped_column(ForeignKey("branch_masters.id"), default=None)
+    merged_at: Mapped[dt.datetime | None] = mapped_column(default=None)
+
+    merged_into: Mapped["BranchMaster | None"] = relationship(remote_side=[id])
 
 
 class RegionMaster(Base):

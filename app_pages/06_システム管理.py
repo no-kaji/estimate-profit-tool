@@ -1,3 +1,5 @@
+import datetime as dt
+
 import streamlit as st
 from sqlalchemy import select
 
@@ -29,9 +31,14 @@ with tab_users:
     headquarters = session.execute(select(HeadquartersMaster)).scalars().all()
     branches = session.execute(select(BranchMaster)).scalars().all()
     regions = session.execute(select(RegionMaster)).scalars().all()
-    hq_options = {h.id: h.name for h in headquarters}
-    branch_options = {b.id: b.name for b in branches}
+    # 統合済み(active=False)の統括部門・拠点は、新規登録の選択肢からは除外する。
+    # ただし既にその統括部門・拠点が割り当てられているユーザーの表示が壊れないよう、
+    # 一覧表示用のラベルには統合済みの名称もそのまま残しておく。
+    hq_options = {h.id: h.name for h in headquarters if h.active}
+    branch_options = {b.id: b.name for b in branches if b.active}
     region_options = {r.id: r.name for r in regions}
+    hq_labels_all = {h.id: (h.name if h.active else f"{h.name}(統合済み)") for h in headquarters}
+    branch_labels_all = {b.id: (b.name if b.active else f"{b.name}(統合済み)") for b in branches}
 
     st.subheader("新規ユーザー登録")
     with st.form("new_user_form", clear_on_submit=True):
@@ -94,19 +101,28 @@ with tab_users:
             c1.markdown(f"**{u.username}**")
             c1.caption(u.display_name)
             new_role = c2.selectbox("ロール", options=ROLES, index=ROLES.index(u.role), key=f"role_{u.id}", disabled=not u.active)
+            # 選択肢は基本的に有効な統括部門・拠点のみだが、既に統合済みのものが
+            # 割り当てられているユーザーについては、そのままその名称も選択肢に含めて
+            # 表示が崩れない(indexが見つからずエラーになる)ようにする。
+            hq_choice_ids = list(hq_options.keys()) + (
+                [u.headquarters_id] if u.headquarters_id is not None and u.headquarters_id not in hq_options else []
+            )
+            branch_choice_ids = list(branch_options.keys()) + (
+                [u.branch_id] if u.branch_id is not None and u.branch_id not in branch_options else []
+            )
             new_hq = c3.selectbox(
                 "統括部門",
-                options=[None] + list(hq_options.keys()),
-                format_func=lambda i: "未設定" if i is None else hq_options[i],
-                index=(0 if u.headquarters_id is None else list(hq_options.keys()).index(u.headquarters_id) + 1),
+                options=[None] + hq_choice_ids,
+                format_func=lambda i: "未設定" if i is None else hq_labels_all[i],
+                index=(0 if u.headquarters_id is None else hq_choice_ids.index(u.headquarters_id) + 1),
                 key=f"hq_{u.id}",
                 disabled=not u.active,
             )
             new_branch = c4.selectbox(
                 "拠点(部門名称)",
-                options=[None] + list(branch_options.keys()),
-                format_func=lambda i: "未設定" if i is None else branch_options[i],
-                index=(0 if u.branch_id is None else list(branch_options.keys()).index(u.branch_id) + 1),
+                options=[None] + branch_choice_ids,
+                format_func=lambda i: "未設定" if i is None else branch_labels_all[i],
+                index=(0 if u.branch_id is None else branch_choice_ids.index(u.branch_id) + 1),
                 key=f"branch_{u.id}",
                 disabled=not u.active,
             )
@@ -152,6 +168,12 @@ with tab_users:
 # 組織属性マスタ(統括部門・拠点・地域区分)
 # ---------------------------------------------------------------
 with tab_org:
+    st.caption(
+        "統廃合・組織変更で部門を統合したいときは「統合」を使ってください。統合すると、"
+        "所属していたユーザーは統合先へ自動的に付け替わり、統合元の名称は「統合済み」として"
+        "履歴に残ります(行自体は削除しません)。過去に作成済みの見積は、作成時点の部門名を"
+        "そのまま保持しているため、統合・名称変更を行っても表示内容は変わりません。"
+    )
     col_hq, col_branch, col_region = st.columns(3)
     with col_hq:
         st.subheader("統括部門名称マスタ")
@@ -167,8 +189,31 @@ with tab_org:
                     session.add(HeadquartersMaster(name=name))
                     session.commit()
                     st.rerun()
-        for h in headquarters:
-            st.write(f"- {h.name}")
+        active_hq = [h for h in headquarters if h.active]
+        for h in active_hq:
+            hc1, hc2 = st.columns([3, 2])
+            hc1.write(f"- {h.name}")
+            merge_targets = {o.id: o.name for o in active_hq if o.id != h.id}
+            if merge_targets:
+                target_id = hc2.selectbox(
+                    "統合先", options=list(merge_targets.keys()), format_func=lambda i: merge_targets[i],
+                    key=f"hq_merge_target_{h.id}", label_visibility="collapsed",
+                )
+                if hc2.button("この統括部門を統合", key=f"hq_merge_{h.id}"):
+                    target = session.get(HeadquartersMaster, target_id)
+                    for u in session.execute(select(User).where(User.headquarters_id == h.id)).scalars().all():
+                        u.headquarters_id = target.id
+                    h.active = False
+                    h.merged_into_id = target.id
+                    h.merged_at = dt.datetime.utcnow()
+                    session.commit()
+                    st.success(f"「{h.name}」を「{target.name}」に統合しました。")
+                    st.rerun()
+        merged_hq = [h for h in headquarters if not h.active]
+        if merged_hq:
+            with st.expander(f"統合済み({len(merged_hq)}件)"):
+                for h in merged_hq:
+                    st.caption(f"{h.name} → {h.merged_into.name if h.merged_into else '(不明)'}({h.merged_at})")
     with col_branch:
         st.subheader("拠点名称マスタ(部門名称)")
         with st.form("new_branch_form", clear_on_submit=True):
@@ -183,8 +228,31 @@ with tab_org:
                     session.add(BranchMaster(name=name))
                     session.commit()
                     st.rerun()
-        for b in branches:
-            st.write(f"- {b.name}")
+        active_branches = [b for b in branches if b.active]
+        for b in active_branches:
+            bc1, bc2 = st.columns([3, 2])
+            bc1.write(f"- {b.name}")
+            merge_targets = {o.id: o.name for o in active_branches if o.id != b.id}
+            if merge_targets:
+                target_id = bc2.selectbox(
+                    "統合先", options=list(merge_targets.keys()), format_func=lambda i: merge_targets[i],
+                    key=f"branch_merge_target_{b.id}", label_visibility="collapsed",
+                )
+                if bc2.button("この拠点を統合", key=f"branch_merge_{b.id}"):
+                    target = session.get(BranchMaster, target_id)
+                    for u in session.execute(select(User).where(User.branch_id == b.id)).scalars().all():
+                        u.branch_id = target.id
+                    b.active = False
+                    b.merged_into_id = target.id
+                    b.merged_at = dt.datetime.utcnow()
+                    session.commit()
+                    st.success(f"「{b.name}」を「{target.name}」に統合しました。")
+                    st.rerun()
+        merged_branches = [b for b in branches if not b.active]
+        if merged_branches:
+            with st.expander(f"統合済み({len(merged_branches)}件)"):
+                for b in merged_branches:
+                    st.caption(f"{b.name} → {b.merged_into.name if b.merged_into else '(不明)'}({b.merged_at})")
     with col_region:
         st.subheader("地域区分マスタ")
         with st.form("new_region_form", clear_on_submit=True):

@@ -9,7 +9,10 @@ from app.models import (
     CancellationPolicyMaster,
     ContractType,
     ContractTypePattern,
+    CostLine,
+    FinancialRecord,
     InsuranceRateMaster,
+    LineItem,
     PricingPattern,
     ProductMaster,
     SegmentMaster,
@@ -59,10 +62,32 @@ with tab_contract:
             p.qty1_label = row["数量1ラベル"] or None
             p.qty2_label = row["数量2ラベル"] or None
             p.qty3_label = row["数量3ラベル"] or None
+        blocked_patterns = []
         for name, p in existing_by_name.items():
-            if name not in seen:
+            if name in seen:
+                continue
+            in_use = (
+                session.execute(
+                    select(ContractTypePattern).where(ContractTypePattern.pricing_pattern_id == p.id)
+                ).first()
+                is not None
+                or session.execute(
+                    select(CostLine).where(
+                        (CostLine.billing_pricing_pattern_id == p.id) | (CostLine.cost_pricing_pattern_id == p.id)
+                    )
+                ).first()
+                is not None
+            )
+            if in_use:
+                blocked_patterns.append(name)
+            else:
                 session.delete(p)
         session.commit()
+        if blocked_patterns:
+            st.warning(
+                f"以下の計算パターンは、契約形式または経費行で使用されているため削除できませんでした: {', '.join(blocked_patterns)}"
+                "(先に紐付けを解除してから削除してください)"
+            )
         st.success("計算パターンを保存しました。")
         st.rerun()
 
@@ -121,10 +146,21 @@ with tab_billing:
                 session.add(item)
             item.category = row["区分"] or ""
             item.item_detail = row["詳細"] or ""
+        blocked_items = []
         for name, item in existing_by_name.items():
-            if name not in seen:
+            if name in seen:
+                continue
+            in_use = session.execute(select(LineItem).where(LineItem.billing_item_id == item.id)).first() is not None
+            if in_use:
+                blocked_items.append(name)
+            else:
                 session.delete(item)
         session.commit()
+        if blocked_items:
+            st.warning(
+                f"以下の請求項目は、見積の明細行で使用されているため削除できませんでした: {', '.join(blocked_items)}"
+                "(先に該当の明細行を削除・変更してから削除してください)"
+            )
         st.success("保存しました。")
         st.rerun()
 
@@ -228,9 +264,15 @@ with tab_segment_product:
             sc1, sc2 = st.columns([4, 1])
             sc1.write(f"- {s.name}")
             if sc2.button("削除", key=f"del_segment_{s.id}"):
-                session.delete(s)
-                session.commit()
-                st.rerun()
+                in_use = session.execute(
+                    select(FinancialRecord).where(FinancialRecord.segment == s.name, FinancialRecord.deleted_at.is_(None))
+                ).first()
+                if in_use is not None:
+                    st.error(f"「{s.name}」は使用中の見積があるため削除できません。")
+                else:
+                    session.delete(s)
+                    session.commit()
+                    st.rerun()
     with col_prod:
         st.subheader("商材マスタ")
         products = session.execute(select(ProductMaster)).scalars().all()
@@ -250,8 +292,14 @@ with tab_segment_product:
             pc1, pc2 = st.columns([4, 1])
             pc1.write(f"- {p.name}")
             if pc2.button("削除", key=f"del_product_{p.id}"):
-                session.delete(p)
-                session.commit()
-                st.rerun()
+                in_use = session.execute(
+                    select(FinancialRecord).where(FinancialRecord.product == p.name, FinancialRecord.deleted_at.is_(None))
+                ).first()
+                if in_use is not None:
+                    st.error(f"「{p.name}」は使用中の見積があるため削除できません。")
+                else:
+                    session.delete(p)
+                    session.commit()
+                    st.rerun()
 
 session.close()
